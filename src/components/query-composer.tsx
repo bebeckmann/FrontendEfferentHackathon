@@ -72,9 +72,6 @@ export function QueryComposer({
             disabled={disabled}
             autoComplete="off"
           />
-          <button type="button" className="chat-emoji-button" aria-label="Emoji picker">
-            <Laugh size={24} aria-hidden="true" />
-          </button>
         </div>
 
         <div className="chat-composer-actions">
