@@ -270,7 +270,7 @@ button.assistant-bubble {
   gap: 10px;
   border-top: 1px solid var(--border);
   padding: 0;
-  background: #f1ece4;
+  background: white;
 }
 
 .chat-footer .status-panel,
