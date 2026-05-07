@@ -1,7 +1,7 @@
 import type { AgentRunResponse, ApiErrorResponse } from "./dto";
 import { createMockRun } from "./mock-data";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS !== "false";
 
 export async function submitTextRun(query: string): Promise<AgentRunResponse> {
@@ -15,7 +15,7 @@ export async function submitTextRun(query: string): Promise<AgentRunResponse> {
     return createMockRun(cleanedQuery);
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/runs`, {
+  const response = await fetch(apiPath("/api/runs"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -44,7 +44,7 @@ export async function submitAudioRun(audio: Blob): Promise<AgentRunResponse> {
   formData.append("audio", audio, `query.${audioExtension(audio.type)}`);
   formData.append("locale", navigator.language || "de-DE");
 
-  const response = await fetch(`${API_BASE_URL}/api/runs/audio`, {
+  const response = await fetch(apiPath("/api/runs/audio"), {
     method: "POST",
     body: formData
   });
@@ -58,7 +58,7 @@ export async function getRun(runId: string): Promise<AgentRunResponse> {
     return createMockRun(`Geladener Run ${runId}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/runs/${runId}`);
+  const response = await fetch(apiPath(`/api/runs/${runId}`));
   return parseJsonResponse(response);
 }
 
@@ -85,6 +85,10 @@ function audioExtension(mimeType: string) {
   if (mimeType.includes("mpeg")) return "mp3";
   if (mimeType.includes("wav")) return "wav";
   return "webm";
+}
+
+function apiPath(path: string) {
+  return `${API_BASE_URL}${path}`;
 }
 
 function delay(ms: number) {

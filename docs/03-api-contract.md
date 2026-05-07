@@ -2,7 +2,7 @@
 
 ## Boundary
 
-The frontend calls only the Python backend. The backend owns:
+The frontend calls same-origin `/api` endpoints. In local Python-agent development those endpoints can be mirrored by the Python backend, but Vercel deployment uses Next.js serverless route handlers. The server side owns:
 
 - OpenRouter API keys.
 - Speech-to-text requests.
@@ -14,9 +14,7 @@ The frontend sends text or audio input and renders the returned answer and evide
 
 ## Frontend Environment
 
-```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-```
+On Vercel, leave `NEXT_PUBLIC_API_BASE_URL` empty so browser calls resolve to the deployed app origin.
 
 Do not expose `OPENROUTER_API_KEY` in the frontend.
 

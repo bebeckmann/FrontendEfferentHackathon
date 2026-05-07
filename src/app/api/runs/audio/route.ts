@@ -1,0 +1,57 @@
+import { audioFormatFromFile, languageFromLocale, transcribeAudio, TranscriptionError } from "@/server/openrouter-asr";
+import { completedRunResponse, elapsedMs, errorResponse } from "@/server/run-response";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
+
+export async function POST(request: Request) {
+  const startedAt = performance.now();
+  const formData = await request.formData().catch(() => null);
+  if (!formData) {
+    return errorResponse(400, "VALIDATION_FAILED", "Multipart form data is required.");
+  }
+
+  const audio = formData?.get("audio");
+
+  if (!(audio instanceof File)) {
+    return errorResponse(400, "VALIDATION_FAILED", "Audio file is required.");
+  }
+
+  if (audio.size === 0) {
+    return errorResponse(400, "AUDIO_EMPTY", "Die Audioaufnahme ist leer.");
+  }
+
+  if (audio.size > MAX_AUDIO_BYTES) {
+    return errorResponse(413, "AUDIO_TOO_LARGE", "Die Audioaufnahme ist zu gross.");
+  }
+
+  try {
+    const transcript = await transcribeAudio({
+      audio: await audio.arrayBuffer(),
+      audioFormat: audioFormatFromFile(audio),
+      language: languageFromLocale(formData.get("locale"))
+    });
+
+    return Response.json(
+      completedRunResponse({
+        query: transcript.text,
+        transcript: {
+          text: transcript.text,
+          language: transcript.language,
+          model: transcript.model
+        },
+        answerMarkdown:
+          `**Transkript:** ${transcript.text}\n\n` +
+          "Die ASR-Pipeline laeuft jetzt als Vercel Serverless Route. Sobald der LangChain-Agent angeschlossen ist, wird dieses Transkript an den Agenten uebergeben und die Docling-Belege werden hier angezeigt.",
+        latencyMs: elapsedMs(startedAt),
+        asrSeconds: transcript.usage?.seconds
+      })
+    );
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : undefined;
+    const status = error instanceof TranscriptionError ? 502 : 500;
+    return errorResponse(status, "ASR_FAILED", "Die Audioaufnahme konnte nicht transkribiert werden.", cause);
+  }
+}
