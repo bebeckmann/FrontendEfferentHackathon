@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import { Download, Loader2, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AgentRunResponse } from "@/lib/dto";
+import { synthesizeSpeech } from "@/lib/api-client";
 import { downloadChatHistoryPdf } from "@/lib/pdf-export";
 
 type AnswerPanelProps = {
@@ -14,53 +15,67 @@ type AnswerPanelProps = {
 
 export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [isLoadingSpeech, setIsLoadingSpeech] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const speechAbortRef = useRef<AbortController | null>(null);
 
   const markdown = run?.answer?.markdown;
 
   useEffect(() => {
     return () => {
-      window.speechSynthesis?.cancel();
+      stopSpeech();
     };
   }, []);
 
   function stopSpeech() {
-    window.speechSynthesis?.cancel();
-    utteranceRef.current = null;
+    speechAbortRef.current?.abort();
+    speechAbortRef.current = null;
+    audioRef.current?.pause();
+    audioRef.current = null;
+
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+
     setIsSpeaking(false);
+    setIsLoadingSpeech(false);
   }
 
-  function toggleSpeech() {
+  async function toggleSpeech() {
     if (!markdown) return;
 
-    if (isSpeaking) {
+    if (isSpeaking || isLoadingSpeech) {
       stopSpeech();
       return;
     }
 
     const text = markdownToSpeechText(markdown);
-    if (!text || !("speechSynthesis" in window)) return;
+    if (!text) return;
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = guessSpeechLocale(text);
-    utterance.rate = 0.95;
-    utterance.onend = () => {
-      if (utteranceRef.current === utterance) {
-        utteranceRef.current = null;
-        setIsSpeaking(false);
-      }
-    };
-    utterance.onerror = () => {
-      if (utteranceRef.current === utterance) {
-        utteranceRef.current = null;
-        setIsSpeaking(false);
-      }
-    };
+    const abortController = new AbortController();
+    speechAbortRef.current = abortController;
+    setIsLoadingSpeech(true);
 
-    utteranceRef.current = utterance;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-    setIsSpeaking(true);
+    try {
+      const speech = await synthesizeSpeech(text, abortController.signal);
+      const audioUrl = URL.createObjectURL(speech.blob);
+      const audio = new Audio(audioUrl);
+
+      audioUrlRef.current = audioUrl;
+      audioRef.current = audio;
+      audio.onended = stopSpeech;
+      audio.onerror = stopSpeech;
+
+      await audio.play();
+      setIsLoadingSpeech(false);
+      setIsSpeaking(true);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      console.error("TTS playback failed:", error);
+      stopSpeech();
+    }
   }
 
   return (
@@ -77,16 +92,18 @@ export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
             className="icon-button"
             onClick={toggleSpeech}
             disabled={!markdown}
-            aria-pressed={isSpeaking}
+            aria-pressed={isSpeaking || isLoadingSpeech}
           >
-            {isSpeaking ? (
+            {isLoadingSpeech ? (
+              <Loader2 size={18} aria-hidden="true" className="spin" />
+            ) : isSpeaking ? (
               <VolumeX size={18} aria-hidden="true" />
             ) : (
               <Volume2 size={18} aria-hidden="true" />
             )}
 
             <span className="sr-only">
-              {isSpeaking ? "Vorlesen stoppen" : "Antwort vorlesen"}
+              {isSpeaking || isLoadingSpeech ? "Vorlesen stoppen" : "Antwort vorlesen"}
             </span>
           </button>
 
@@ -155,10 +172,4 @@ function markdownToSpeechText(markdown: string) {
     .replace(/#{1,6}\s+/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-}
-
-function guessSpeechLocale(text: string) {
-  return /[äöüß]|(\b(und|oder|nicht|mit|für|auf|der|die|das|eine|einen)\b)/i.test(text)
-    ? "de-DE"
-    : "en-US";
 }

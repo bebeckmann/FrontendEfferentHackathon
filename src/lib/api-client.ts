@@ -1,8 +1,11 @@
 import type { AgentModelOption, AgentRunResponse, ApiErrorResponse } from "./dto";
 import { createMockRun } from "./mock-data";
 
-const API_BASE_URL = "https://backendefferenthackathon.onrender.com"
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://backendefferenthackathon.onrender.com").replace(/\/$/, "");
 const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "true";
+const TTS_MODEL = process.env.NEXT_PUBLIC_TTS_MODEL ?? "openai/gpt-4o-mini-tts-2025-12-15";
+const TTS_VOICE = process.env.NEXT_PUBLIC_TTS_VOICE ?? "nova";
+const TTS_RESPONSE_FORMAT = "mp3";
 
 export const AGENT_MODELS = [
   {
@@ -22,6 +25,13 @@ export const AGENT_MODELS = [
 export type SubmitRunInput = {
   query: string;
   model: AgentModelOption;
+};
+
+export type SpeechAudio = {
+  blob: Blob;
+  generationId?: string;
+  model?: string;
+  voice?: string;
 };
 
 type AgentApiResponse = {
@@ -148,6 +158,71 @@ export async function fetchSuccessImageRun(): Promise<AgentRunResponse> {
   };
 }
 
+export async function synthesizeSpeech(text: string, signal?: AbortSignal): Promise<SpeechAudio> {
+  const cleanedText = text.trim();
+  if (!cleanedText) {
+    throw new Error("There is no answer text to read.");
+  }
+
+  const response = await fetch(apiPath("/api/tts"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    signal,
+    body: JSON.stringify({
+      input: cleanedText,
+      text: cleanedText,
+      language: "en",
+      model: TTS_MODEL,
+      voice: TTS_VOICE,
+      response_format: TTS_RESPONSE_FORMAT
+    })
+  });
+
+  if (!response.ok) {
+    const message = await extractErrorMessage(response);
+    throw new Error(message || "The text-to-speech request could not be processed.");
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.startsWith("audio/")) {
+    return {
+      blob: await response.blob(),
+      generationId: response.headers.get("x-generation-id") ?? undefined,
+      model: response.headers.get("x-tts-model") ?? TTS_MODEL,
+      voice: response.headers.get("x-tts-voice") ?? TTS_VOICE
+    };
+  }
+
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        data_url?: string;
+        base64?: string;
+        mime_type?: string;
+        generation_id?: string;
+        model?: string;
+        voice?: string;
+      }
+    | null;
+
+  if (!payload) {
+    throw new Error("The text-to-speech API returned an empty response.");
+  }
+
+  const blob = speechPayloadToBlob(payload);
+  if (!blob.size) {
+    throw new Error("The text-to-speech API returned empty audio.");
+  }
+
+  return {
+    blob,
+    generationId: payload.generation_id,
+    model: payload.model ?? TTS_MODEL,
+    voice: payload.voice ?? TTS_VOICE
+  };
+}
+
 function extractSuccessImages(payload: SuccessImageResponse): SuccessImageItem[] {
   let rawImages: SuccessImageItem[];
   if (Array.isArray(payload)) {
@@ -186,6 +261,42 @@ async function parseAgentChatResponse(response: Response): Promise<AgentApiRespo
   }
 
   return payload;
+}
+
+async function extractErrorMessage(response: Response) {
+  const payload = (await response.json().catch(() => null)) as
+    | ApiErrorResponse
+    | { detail?: string; error?: string }
+    | null;
+  if (!payload) return "";
+  if ("error" in payload && typeof payload.error === "string") return payload.error;
+  if ("detail" in payload && typeof payload.detail === "string") return payload.detail;
+  if (
+    "error" in payload &&
+    typeof payload.error === "object" &&
+    payload.error &&
+    "message" in payload.error &&
+    typeof payload.error.message === "string"
+  ) {
+    return payload.error.message;
+  }
+  return "";
+}
+
+function speechPayloadToBlob(payload: { data_url?: string; base64?: string; mime_type?: string }) {
+  const mimeType = payload.mime_type ?? "audio/mpeg";
+  const base64 = payload.data_url?.includes(",") ? payload.data_url.split(",", 2)[1] : payload.base64;
+  if (!base64) {
+    throw new Error("The text-to-speech API returned an unexpected audio response.");
+  }
+
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return new Blob([bytes], { type: mimeType });
 }
 
 function apiPath(path: string) {

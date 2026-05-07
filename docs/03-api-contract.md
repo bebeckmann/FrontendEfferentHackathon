@@ -8,7 +8,7 @@ The Vercel frontend calls the Render FastAPI backend directly:
 https://backendefferenthackathon.onrender.com
 ```
 
-The backend owns LangChain execution, OpenRouter credentials, uploaded-image handling, and source generation. The frontend owns the chat UI, browser speech recognition, browser speech playback, PDF export, and rendering the returned answer and sources.
+The backend owns LangChain execution, OpenRouter credentials, text-to-speech synthesis, uploaded-image handling, and source generation. The frontend owns the chat UI, browser speech recognition, audio playback, PDF export, and rendering the returned answer and sources.
 
 ## Frontend Environment
 
@@ -17,6 +17,8 @@ NEXT_PUBLIC_API_BASE_URL=https://backendefferenthackathon.onrender.com
 NEXT_PUBLIC_USE_MOCKS=false
 NEXT_PUBLIC_FAST_MODEL=openai/gpt-4o-mini
 NEXT_PUBLIC_REASONING_MODEL=openai/o3
+NEXT_PUBLIC_TTS_MODEL=openai/gpt-4o-mini-tts-2025-12-15
+NEXT_PUBLIC_TTS_VOICE=nova
 ```
 
 Do not expose `OPENROUTER_API_KEY` in the frontend.
@@ -101,6 +103,47 @@ The UI exposes two modes:
 | `Reasoning` | `openai/o3` | Stronger multi-step reasoning |
 
 For the model switch to affect generation, the backend should read the optional `model` form field and pass it into `build_agent`, instead of only using `OPENROUTER_MODEL` from the environment.
+
+## Text To Speech
+
+`POST /api/tts`
+
+Request body:
+
+```json
+{
+  "input": "English answer text to synthesize.",
+  "text": "English answer text to synthesize.",
+  "language": "en",
+  "model": "openai/gpt-4o-mini-tts-2025-12-15",
+  "voice": "nova",
+  "response_format": "mp3"
+}
+```
+
+The backend should call OpenRouter server-side, for example:
+
+```text
+POST https://openrouter.ai/api/v1/audio/speech
+```
+
+with the OpenRouter API key kept in backend environment variables. The frontend accepts either raw audio bytes:
+
+```http
+Content-Type: audio/mpeg
+```
+
+or JSON:
+
+```json
+{
+  "mime_type": "audio/mpeg",
+  "base64": "...",
+  "data_url": "data:audio/mpeg;base64,...",
+  "model": "openai/gpt-4o-mini-tts-2025-12-15",
+  "voice": "nova"
+}
+```
 
 ## Frontend DTO
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Laugh, Plus, Send } from "lucide-react";
+import { Plus, Send } from "lucide-react";
 import { AudioRecorder } from "./audio-recorder";
 import type { AgentModelOption } from "@/lib/dto";
 

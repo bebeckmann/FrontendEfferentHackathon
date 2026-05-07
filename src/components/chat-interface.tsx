@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { QueryComposer } from "./query-composer";
 import { RunStatus } from "./run-status";
 import type { AgentModelOption, AgentRunResponse } from "@/lib/dto";
+import { synthesizeSpeech } from "@/lib/api-client";
 import { downloadChatHistoryPdf } from "@/lib/pdf-export";
 
 type ChatInterfaceProps = {
@@ -36,7 +37,10 @@ export function ChatInterface({
   onRetry
 }: ChatInterfaceProps) {
   const [speakingRunId, setSpeakingRunId] = useState<string | null>(null);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [loadingSpeechRunId, setLoadingSpeechRunId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const speechAbortRef = useRef<AbortController | null>(null);
 
   const selectedRun = useMemo(
     () => history.find((run) => run.runId === selectedRunId) ?? history.at(-1) ?? null,
@@ -45,52 +49,63 @@ export function ChatInterface({
 
   useEffect(() => {
     return () => {
-      window.speechSynthesis?.cancel();
+      stopSpeech();
     };
   }, []);
 
   function stopSpeech() {
-    window.speechSynthesis?.cancel();
-    utteranceRef.current = null;
+    speechAbortRef.current?.abort();
+    speechAbortRef.current = null;
+    audioRef.current?.pause();
+    audioRef.current = null;
+
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+
     setSpeakingRunId(null);
+    setLoadingSpeechRunId(null);
   }
 
-  function toggleSpeech(run: AgentRunResponse) {
+  async function toggleSpeech(run: AgentRunResponse) {
     const markdown = run.answer?.markdown;
     if (!markdown) return;
 
-    if (speakingRunId === run.runId) {
+    if (speakingRunId === run.runId || loadingSpeechRunId === run.runId) {
       stopSpeech();
       return;
     }
 
-    if (speakingRunId) {
+    if (speakingRunId || loadingSpeechRunId) {
       stopSpeech();
     }
 
     const text = markdownToSpeechText(markdown);
-    if (!text || !("speechSynthesis" in window)) return;
+    if (!text) return;
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = guessSpeechLocale(text);
-    utterance.rate = 0.95;
-    utterance.onend = () => {
-      if (utteranceRef.current === utterance) {
-        utteranceRef.current = null;
-        setSpeakingRunId(null);
-      }
-    };
-    utterance.onerror = () => {
-      if (utteranceRef.current === utterance) {
-        utteranceRef.current = null;
-        setSpeakingRunId(null);
-      }
-    };
+    const abortController = new AbortController();
+    speechAbortRef.current = abortController;
+    setLoadingSpeechRunId(run.runId);
 
-    utteranceRef.current = utterance;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-    setSpeakingRunId(run.runId);
+    try {
+      const speech = await synthesizeSpeech(text, abortController.signal);
+      const audioUrl = URL.createObjectURL(speech.blob);
+      const audio = new Audio(audioUrl);
+
+      audioUrlRef.current = audioUrl;
+      audioRef.current = audio;
+      audio.onended = stopSpeech;
+      audio.onerror = stopSpeech;
+
+      await audio.play();
+      setLoadingSpeechRunId(null);
+      setSpeakingRunId(run.runId);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      console.error("TTS playback failed:", error);
+      stopSpeech();
+    }
   }
 
   return (
@@ -122,6 +137,7 @@ export function ChatInterface({
         {history.map((run) => {
           const isSelected = selectedRun?.runId === run.runId;
           const isThisRunSpeaking = speakingRunId === run.runId;
+          const isThisRunLoadingSpeech = loadingSpeechRunId === run.runId;
 
           return (
             <div key={run.runId} className="chat-run">
@@ -153,16 +169,18 @@ export function ChatInterface({
                     className="icon-button"
                     onClick={() => toggleSpeech(run)}
                     disabled={!run.answer?.markdown}
-                    aria-pressed={isThisRunSpeaking}
+                    aria-pressed={isThisRunSpeaking || isThisRunLoadingSpeech}
                   >
-                    {isThisRunSpeaking ? (
+                    {isThisRunLoadingSpeech ? (
+                      <Loader2 size={17} aria-hidden="true" className="spin" />
+                    ) : isThisRunSpeaking ? (
                       <VolumeX size={17} aria-hidden="true" />
                     ) : (
                       <Volume2 size={17} aria-hidden="true" />
                     )}
 
                     <span className="sr-only">
-                      {isThisRunSpeaking ? "Vorlesen stoppen" : "Antwort vorlesen"}
+                      {isThisRunSpeaking || isThisRunLoadingSpeech ? "Vorlesen stoppen" : "Antwort vorlesen"}
                     </span>
                   </button>
                 </div>
@@ -220,10 +238,4 @@ function markdownToSpeechText(markdown: string) {
     .replace(/#{1,6}\s+/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-}
-
-function guessSpeechLocale(text: string) {
-  return /[äöüß]|(\b(und|oder|nicht|mit|für|auf|der|die|das|eine|einen)\b)/i.test(text)
-    ? "de-DE"
-    : "en-US";
 }

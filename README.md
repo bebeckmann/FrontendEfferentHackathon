@@ -19,6 +19,8 @@ NEXT_PUBLIC_API_BASE_URL=https://backendefferenthackathon.onrender.com
 NEXT_PUBLIC_USE_MOCKS=false
 NEXT_PUBLIC_FAST_MODEL=openai/gpt-4o-mini
 NEXT_PUBLIC_REASONING_MODEL=openai/o3
+NEXT_PUBLIC_TTS_MODEL=openai/gpt-4o-mini-tts-2025-12-15
+NEXT_PUBLIC_TTS_VOICE=nova
 ```
 
 ## Deploy To Vercel
@@ -31,12 +33,15 @@ NEXT_PUBLIC_USE_MOCKS=false
 NEXT_PUBLIC_API_BASE_URL=https://backendefferenthackathon.onrender.com
 NEXT_PUBLIC_FAST_MODEL=openai/gpt-4o-mini
 NEXT_PUBLIC_REASONING_MODEL=openai/o3
+NEXT_PUBLIC_TTS_MODEL=openai/gpt-4o-mini-tts-2025-12-15
+NEXT_PUBLIC_TTS_VOICE=nova
 ```
 
 3. Deploy.
 
 The frontend calls `https://backendefferenthackathon.onrender.com/api/chat` with `multipart/form-data` fields `message`, `session_id`, `model`, and `model_profile`. The response can contain `answer` plus either `sources` or the older `images` field.
-Voice input and answer playback run in the browser via Web Speech APIs, so the Vercel frontend does not need an `OPENROUTER_API_KEY`.
+
+Answer playback calls `POST /api/tts` on the same Agent API with English text plus `model`, `voice`, and `response_format`. That backend route should call OpenRouter server-side, for example `POST https://openrouter.ai/api/v1/audio/speech`, and return either raw `audio/*` bytes or JSON with `data_url`/`base64`.
 
 Make sure the Render backend has `FRONTEND_ORIGIN` set to your deployed Vercel origin, otherwise browser CORS will block requests. Example:
 
