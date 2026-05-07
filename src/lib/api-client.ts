@@ -23,7 +23,7 @@ export async function submitTextRun(query: string): Promise<AgentRunResponse> {
     body: JSON.stringify({
       inputType: "text",
       query: cleanedQuery,
-      locale: navigator.language || "de-DE"
+      locale: navigator.language || "en-EN"
     })
   });
 
@@ -37,7 +37,7 @@ export async function submitAudioRun(audio: Blob): Promise<AgentRunResponse> {
 
   if (USE_MOCKS) {
     await delay(800);
-    return createMockRun("Welche Risiken werden im Vertrag genannt?", "Welche Risiken werden im Vertrag genannt?");
+    return createMockRun("What is the relationship between initial lactate level and 28-day mortality in septic shock?", "What is the relationship between initial lactate level and 28-day mortality in septic shock?");
   }
 
   const formData = new FormData();

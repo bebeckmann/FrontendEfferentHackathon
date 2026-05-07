@@ -49,7 +49,7 @@ export function QueryComposer({
           className="chat-input"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Welche Risiken werden im Vertrag genannt?"
+          placeholder="What is the relationship between initial lactate level and 28-day mortality in septic shock?"
           disabled={disabled}
           autoComplete="off"
         />

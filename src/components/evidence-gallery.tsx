@@ -22,8 +22,8 @@ export function EvidenceGallery({ evidence, isRunning, selectedRun }: EvidenceGa
     <section className="evidence-section surface" aria-labelledby="evidence-title" aria-busy={isRunning}>
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Quellen</p>
-          <h2 id="evidence-title">Ausgewaehlte Antwort</h2>
+          <p className="eyebrow">Sources</p>
+          <h2 id="evidence-title">Selected answer</h2>
         </div>
         <span className="count-badge">{evidence.length}</span>
       </div>
@@ -65,7 +65,7 @@ export function EvidenceGallery({ evidence, isRunning, selectedRun }: EvidenceGa
                 </div>
                 <button type="button" className="icon-button" onClick={() => setSelectedIndex(index)}>
                   <ExternalLink size={17} aria-hidden="true" />
-                  <span className="sr-only">Evidence oeffnen</span>
+                  <span className="sr-only">Open evidence</span>
                 </button>
               </div>
               {item.rationale ? <p className="evidence-rationale">{item.rationale}</p> : null}
@@ -75,7 +75,7 @@ export function EvidenceGallery({ evidence, isRunning, selectedRun }: EvidenceGa
       ) : (
         <div className="empty-state evidence-empty">
           <ImageIcon size={24} aria-hidden="true" />
-          <p>{selectedRun ? "Fuer diese Antwort wurden noch keine Quellen zurueckgegeben." : "Waehle eine Antwort im Chat aus."}</p>
+          <p>{selectedRun ? "For this answer no sources have been obtained" : "Choose an answer from the chat on the left."}</p>
         </div>
       )}
 

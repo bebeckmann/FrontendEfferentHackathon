@@ -37,7 +37,7 @@ export function RunStatus({ run, isRunning, errorMessage, onRetry }: RunStatusPr
       ) : run ? (
         <div className="notice success">
           <CheckCircle2 size={18} aria-hidden="true" />
-          <span>{run.evidence.length} Evidence-Bilder gefunden.</span>
+          <span>{run.evidence.length} Evidence-Images found.</span>
         </div>
       ) : (
         <div className="notice muted">

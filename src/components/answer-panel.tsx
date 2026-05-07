@@ -58,7 +58,7 @@ export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
           </button>
           <button type="button" className="icon-button" onClick={() => downloadChatHistoryPdf(history)} disabled={!history.length}>
             <Download size={18} aria-hidden="true" />
-            <span className="sr-only">Chatverlauf als PDF herunterladen</span>
+            <span className="sr-only">Save chat as PDF</span>
           </button>
         </div>
       </div>
@@ -66,7 +66,7 @@ export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
       {isRunning ? (
         <div className="loading-state">
           <Loader2 size={22} aria-hidden="true" className="spin" />
-          <span>Agent verarbeitet Anfrage und sammelt Belege.</span>
+          <span>Agent is working on the perfect answer...</span>
         </div>
       ) : markdown ? (
         <>
@@ -96,7 +96,7 @@ export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
         </>
       ) : (
         <div className="empty-state">
-          <p>Stelle eine Frage per Text oder Sprache, um die Antwort und Docling-Belege zu sehen.</p>
+          <p>Ask a question via voice or text and the agent will answer here.</p>
         </div>
       )}
     </section>

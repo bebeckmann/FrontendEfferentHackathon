@@ -76,7 +76,7 @@ export function ChatInterface({
       <div className="chat-messages" aria-live="polite">
         {!history.length && !pendingMessage ? (
           <div className="chat-empty">
-            <p>Stelle links unten eine Frage per Text oder Sprache.</p>
+            <p>Ask a question on the bottom via voice or text.</p>
           </div>
         ) : null}
 
@@ -97,8 +97,8 @@ export function ChatInterface({
                   onClick={() => onSelectRun(run.runId)}
                 >
                   <div className="message-meta">
-                    <span>Antwort</span>
-                    <span>{run.evidence.length} Quellen</span>
+                    <span>Answer</span>
+                    <span>{run.evidence.length} Sources</span>
                   </div>
                   <div className="markdown chat-markdown">
                     <ReactMarkdown>{run.answer?.markdown ?? "-"}</ReactMarkdown>
