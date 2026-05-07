@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Send, Trash2 } from "lucide-react";
+import { Plus, Send, Trash2 } from "lucide-react";
 import { AudioRecorder } from "./audio-recorder";
 
 type QueryComposerProps = {
@@ -10,52 +10,63 @@ type QueryComposerProps = {
   onSubmitAudio: (audio: Blob) => void;
 };
 
-export function QueryComposer({ disabled, onSubmitText, onSubmitAudio }: QueryComposerProps) {
+export function QueryComposer({
+  disabled,
+  onSubmitText,
+  onSubmitAudio,
+}: QueryComposerProps) {
   const [query, setQuery] = useState("");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!query.trim() || disabled) return;
-    onSubmitText(query.trim());
+
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery || disabled) return;
+
+    onSubmitText(trimmedQuery);
     setQuery("");
   }
 
   return (
-    <section className="composer surface" aria-labelledby="composer-title">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Query</p>
-          <h2 id="composer-title">Frage stellen</h2>
-        </div>
-      </div>
+    <section className="chat-composer" aria-label="Nachricht verfassen">
+      <form onSubmit={handleSubmit} className="chat-composer-form">
+        <button
+          type="button"
+          className="chat-icon-button"
+          onClick={() => setQuery("")}
+          disabled={disabled || !query}
+          aria-label={query ? "Eingabe leeren" : "Aktion öffnen"}
+        >
+          {query ? (
+            <Trash2 size={22} aria-hidden="true" />
+          ) : (
+            <Plus size={28} aria-hidden="true" />
+          )}
+        </button>
 
-      <form onSubmit={handleSubmit} className="composer-form">
-        <label htmlFor="query-input" className="field-label">
-          Text
-        </label>
-        <textarea
+        <input
           id="query-input"
+          className="chat-input"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Welche Risiken werden im Vertrag genannt?"
-          rows={7}
           disabled={disabled}
+          autoComplete="off"
         />
-        <div className="composer-actions">
-          <button type="button" className="icon-button" onClick={() => setQuery("")} disabled={disabled || !query}>
-            <Trash2 size={18} aria-hidden="true" />
-            <span className="sr-only">Eingabe leeren</span>
-          </button>
-          <button type="submit" className="primary-button" disabled={disabled || !query.trim()}>
-            <Send size={18} aria-hidden="true" />
-            Absenden
+
+        <div className="chat-composer-actions">
+          <AudioRecorder disabled={disabled} onSubmitAudio={onSubmitAudio} />
+
+          <button
+            type="submit"
+            className="chat-send-button"
+            disabled={disabled || !query.trim()}
+            aria-label="Absenden"
+          >
+            <Send size={20} aria-hidden="true" />
           </button>
         </div>
       </form>
-
-      <div className="divider" />
-
-      <AudioRecorder disabled={disabled} onSubmitAudio={onSubmitAudio} />
     </section>
   );
 }
