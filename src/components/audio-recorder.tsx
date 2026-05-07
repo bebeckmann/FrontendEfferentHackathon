@@ -15,9 +15,10 @@ export function AudioRecorder({ disabled, onSubmitAudio }: AudioRecorderProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const startedAtRef = useRef<number | null>(null);
-  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "error">("idle");
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [message, setMessage] = useState<string | null>(null);
+
+  const [recordingState, setRecordingState] = useState<
+    "idle" | "recording" | "error"
+  >("idle");
 
   useEffect(() => {
     if (recordingState !== "recording") return;
@@ -25,7 +26,6 @@ export function AudioRecorder({ disabled, onSubmitAudio }: AudioRecorderProps) {
     const timer = window.setInterval(() => {
       const startedAt = startedAtRef.current ?? Date.now();
       const elapsed = Date.now() - startedAt;
-      setElapsedMs(elapsed);
 
       if (elapsed >= MAX_RECORDING_MS) {
         stopRecording();
@@ -42,18 +42,22 @@ export function AudioRecorder({ disabled, onSubmitAudio }: AudioRecorderProps) {
   }, []);
 
   async function startRecording() {
-    setMessage(null);
-
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
       setRecordingState("error");
-      setMessage("Audioaufnahme wird in diesem Browser nicht unterstuetzt.");
       return;
     }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = pickMimeType();
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const recorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined,
+      );
+
       streamRef.current = stream;
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
@@ -65,76 +69,68 @@ export function AudioRecorder({ disabled, onSubmitAudio }: AudioRecorderProps) {
       };
 
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const blob = new Blob(chunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+
         setRecordingState("idle");
-        setMessage("Transkription startet automatisch.");
         stream.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
+        mediaRecorderRef.current = null;
+        startedAtRef.current = null;
+
         onSubmitAudio(blob);
       };
 
       startedAtRef.current = Date.now();
-      setElapsedMs(0);
       setRecordingState("recording");
       recorder.start();
     } catch {
       setRecordingState("error");
-      setMessage("Mikrofonzugriff wurde verweigert oder ist nicht verfuegbar.");
     }
   }
 
   function stopRecording() {
     const recorder = mediaRecorderRef.current;
+
     if (recorder && recorder.state !== "inactive") {
       recorder.stop();
     }
   }
 
   const isRecording = recordingState === "recording";
-  const helperText = isRecording
-    ? `Aufnahme laeuft ${formatDuration(elapsedMs)}`
-    : disabled
-      ? "Transkription oder Agent-Antwort laeuft."
-      : message ?? "Optional per Mikrofon fragen.";
 
-  return (
-    <section className="audio-recorder" aria-labelledby="audio-title">
-      <div>
-        <p id="audio-title" className="field-label">
-          Sprache
-        </p>
-        <p className="helper-text" aria-live="polite">
-          {helperText}
-        </p>
-      </div>
-
-      <div className="audio-actions">
-        {isRecording ? (
-          <button type="button" className="danger-button" onClick={stopRecording}>
-            <Square size={16} aria-hidden="true" />
-            Stop
-          </button>
-        ) : (
-          <button type="button" className="secondary-button" onClick={startRecording} disabled={disabled}>
-            <Mic size={16} aria-hidden="true" />
-            Aufnehmen
-          </button>
-        )}
-      </div>
-    </section>
+  return isRecording ? (
+    <button
+      type="button"
+      className="chat-icon-button recording"
+      onClick={stopRecording}
+      aria-label="Aufnahme stoppen"
+      title="Aufnahme stoppen"
+    >
+      <Square size={20} aria-hidden="true" />
+    </button>
+  ) : (
+    <button
+      type="button"
+      className="chat-icon-button"
+      onClick={startRecording}
+      disabled={disabled}
+      aria-label="Audio aufnehmen"
+      title="Audio aufnehmen"
+    >
+      <Mic size={22} aria-hidden="true" />
+    </button>
   );
 }
 
 function pickMimeType() {
-  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/wav"];
-  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
-}
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/wav",
+  ];
 
-function formatDuration(ms: number) {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, "0");
-  const remaining = (seconds % 60).toString().padStart(2, "0");
-  return `${minutes}:${remaining}`;
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
 }

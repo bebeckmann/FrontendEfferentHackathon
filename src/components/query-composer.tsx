@@ -28,7 +28,7 @@ export function QueryComposer({
   }
 
   return (
-    <section className="chat-composer" aria-label="Nachricht verfassen">
+    <section className="surface status-panel" aria-label="Nachricht verfassen">
       <form onSubmit={handleSubmit} className="chat-composer-form">
         <button
           type="button"
