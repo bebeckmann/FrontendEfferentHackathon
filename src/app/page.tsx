@@ -97,5 +97,5 @@ function formatError(error: unknown) {
     return error.message;
   }
 
-  return "Die Anfrage konnte nicht verarbeitet werden.";
+  return "The request could not be processed.";
 }

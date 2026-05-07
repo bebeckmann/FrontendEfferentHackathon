@@ -129,7 +129,7 @@ export function ChatInterface({
             <article className="message-row assistant">
               <div className="message-bubble assistant-bubble pending">
                 <Loader2 size={18} className="spin" aria-hidden="true" />
-                <span>Agent verarbeitet Anfrage.</span>
+                <span>Agent processes the request.</span>
               </div>
             </article>
           </>

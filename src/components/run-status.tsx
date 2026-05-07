@@ -32,17 +32,17 @@ export function RunStatus({ run, isRunning, errorMessage, onRetry }: RunStatusPr
       ) : isRunning ? (
         <div className="notice">
           <Clock3 size={18} aria-hidden="true" />
-          <span>Laeuft ohne Streaming. Ergebnis erscheint gesammelt.</span>
+          <span>Answer will be available soon.</span>
         </div>
       ) : run ? (
         <div className="notice success">
           <CheckCircle2 size={18} aria-hidden="true" />
-          <span>{run.evidence.length} Evidence-Images found.</span>
+          <span>{run.evidence.length} evidence images found.</span>
         </div>
       ) : (
         <div className="notice muted">
           <Clock3 size={18} aria-hidden="true" />
-          <span>Bereit fuer eine Anfrage.</span>
+          <span>Ready for your question.</span>
         </div>
       )}
     </section>
