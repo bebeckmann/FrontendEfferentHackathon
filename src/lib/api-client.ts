@@ -173,24 +173,18 @@ export async function synthesizeSpeech(text: string, signal?: AbortSignal): Prom
     throw new Error("Missing OpenRouter API key. Set NEXT_PUBLIC_OPENROUTER_API_KEY.");
   }
 
-  const response = await fetch(OPENROUTER_TTS_URL, {
+  const response = await fetch("/api/tts", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-
-      // Optional, aber von OpenRouter empfohlen für App-Zuordnung:
-      "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "",
-      "X-Title": "Efferent Hackathon"
-    },
-    signal,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      input: cleanedText,
-      model: TTS_MODEL,
-      voice: TTS_VOICE,
-      response_format: TTS_RESPONSE_FORMAT
+      input: text,
+      language: "en",
+      model: "openai/gpt-4o-mini-tts-2025-12-15",
+      voice: "nova",
+      response_format: "mp3"
     })
-  });
+  }); 
+
 
   if (!response.ok) {
     const message = await extractOpenRouterErrorMessage(response);
