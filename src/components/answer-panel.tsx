@@ -2,7 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import { Download, Loader2, Volume2, VolumeX } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentRunResponse } from "@/lib/dto";
 import { downloadChatHistoryPdf } from "@/lib/pdf-export";
 
@@ -12,36 +12,107 @@ type AnswerPanelProps = {
   isRunning: boolean;
 };
 
+const TTS_ENDPOINT = "/api/tts";
+
 export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isLoadingSpeech, setIsLoadingSpeech] = useState(false);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const markdown = run?.answer?.markdown;
 
   useEffect(() => {
     return () => {
-      window.speechSynthesis?.cancel();
+      stopSpeech();
     };
   }, []);
 
-  function toggleSpeech() {
+  function stopSpeech() {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+
+    setIsSpeaking(false);
+    setIsLoadingSpeech(false);
+  }
+
+  async function toggleSpeech() {
     if (!markdown) return;
 
-    if (!("speechSynthesis" in window)) {
+    if (isSpeaking || isLoadingSpeech) {
+      stopSpeech();
       return;
     }
 
-    if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-      return;
-    }
+    const text = markdownToSpeechText(markdown);
+    if (!text) return;
 
-    const utterance = new SpeechSynthesisUtterance(markdownToSpeechText(markdown));
-    utterance.lang = "de-DE";
-    utterance.rate = 1;
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    setIsSpeaking(true);
-    window.speechSynthesis.speak(utterance);
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    try {
+      setIsLoadingSpeech(true);
+      setIsSpeaking(true);
+
+      const response = await fetch(TTS_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: abortController.signal,
+        body: JSON.stringify({
+          text,
+          voice: "marin",
+          format: "mp3",
+          instructions:
+            "Sprich auf Deutsch klar, natürlich und ruhig. Nutze eine sachliche Stimme und passende kurze Pausen.",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(errorText || `TTS failed with status ${response.status}`);
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      audioUrlRef.current = audioUrl;
+
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        stopSpeech();
+      };
+
+      audio.onerror = () => {
+        stopSpeech();
+      };
+
+      setIsLoadingSpeech(false);
+      await audio.play();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      console.error("TTS playback failed:", error);
+      stopSpeech();
+    }
   }
 
   return (
@@ -51,12 +122,34 @@ export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
           <p className="eyebrow">Antwort</p>
           <h2 id="answer-title">{run?.answer?.summary ?? "Agent Output"}</h2>
         </div>
+
         <div className="answer-actions">
-          <button type="button" className="icon-button" onClick={toggleSpeech} disabled={!markdown}>
-            {isSpeaking ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
-            <span className="sr-only">{isSpeaking ? "Vorlesen stoppen" : "Antwort vorlesen"}</span>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={toggleSpeech}
+            disabled={!markdown}
+            aria-pressed={isSpeaking}
+          >
+            {isLoadingSpeech ? (
+              <Loader2 size={18} aria-hidden="true" className="spin" />
+            ) : isSpeaking ? (
+              <VolumeX size={18} aria-hidden="true" />
+            ) : (
+              <Volume2 size={18} aria-hidden="true" />
+            )}
+
+            <span className="sr-only">
+              {isSpeaking || isLoadingSpeech ? "Vorlesen stoppen" : "Antwort vorlesen"}
+            </span>
           </button>
-          <button type="button" className="icon-button" onClick={() => downloadChatHistoryPdf(history)} disabled={!history.length}>
+
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => downloadChatHistoryPdf(history)}
+            disabled={!history.length}
+          >
             <Download size={18} aria-hidden="true" />
             <span className="sr-only">Save chat as PDF</span>
           </button>
@@ -76,9 +169,11 @@ export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
               <p>{run.transcript.text}</p>
             </div>
           ) : null}
+
           <div className="markdown">
             <ReactMarkdown>{markdown}</ReactMarkdown>
           </div>
+
           <dl className="metadata-list">
             <div>
               <dt>Run</dt>
@@ -112,5 +207,6 @@ function markdownToSpeechText(markdown: string) {
     .replace(/^\s*[-*]\s+/gm, "")
     .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
     .replace(/#{1,6}\s+/g, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

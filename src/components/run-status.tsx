@@ -42,7 +42,7 @@ export function RunStatus({ run, isRunning, errorMessage, onRetry }: RunStatusPr
       ) : (
         <div className="notice muted">
           <Clock3 size={18} aria-hidden="true" />
-          <span>Ready for your question.</span>
+          <span>Ready for your question!</span>
         </div>
       )}
     </section>

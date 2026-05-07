@@ -8,8 +8,9 @@ from typing import Annotated
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 
 from .openrouter_asr import (
     TranscriptionError,
@@ -17,16 +18,18 @@ from .openrouter_asr import (
     language_from_locale,
     transcribe_audio,
 )
+from .openai_tts import TextToSpeechError, text_to_speech
 
 load_dotenv()
 
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
+MAX_TTS_TEXT_LENGTH = 4096
 
 app = FastAPI(title="Efferent Agent Backend", version="0.1.0")
 
 allowed_origins = [
     origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://www.sepsis-analysis.online").split(",")
     if origin.strip()
 ]
 
@@ -37,6 +40,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class TextToSpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_TTS_TEXT_LENGTH)
+    voice: str | None = None
+    format: str | None = "mp3"
+    instructions: str | None = None
+    speed: float | None = Field(default=None, ge=0.25, le=4.0)
 
 
 @app.exception_handler(HTTPException)
@@ -64,9 +75,10 @@ def health() -> dict[str, str]:
 def create_text_run(payload: dict) -> dict:
     query = str(payload.get("query", "")).strip()
     if not query:
-        raise HTTPException(status_code=400, detail={"code": "VALIDATION_FAILED", "message": "Query is required."})
+        raise api_error(400, "VALIDATION_FAILED", "Query is required.")
 
     started_at = time.perf_counter()
+
     return completed_run_response(
         query=query,
         transcript=None,
@@ -99,7 +111,12 @@ async def create_audio_run(
     try:
         transcript = transcribe_audio(audio_bytes, audio_format, language)
     except TranscriptionError as exc:
-        raise api_error(502, "ASR_FAILED", "Die Audioaufnahme konnte nicht transkribiert werden.", str(exc)) from exc
+        raise api_error(
+            502,
+            "ASR_FAILED",
+            "Die Audioaufnahme konnte nicht transkribiert werden.",
+            str(exc),
+        ) from exc
 
     answer_markdown = (
         "Die ASR-Pipeline ist verbunden. Sobald der LangChain-Agent angeschlossen ist, "
@@ -118,6 +135,41 @@ async def create_audio_run(
         latency_ms=elapsed_ms(started_at),
         asr_seconds=transcript.usage.get("seconds") if transcript.usage else None,
         run_id=clientRunId or None,
+    )
+
+
+@app.post("/api/tts")
+def create_tts_audio(payload: TextToSpeechRequest) -> Response:
+    text = payload.text.strip()
+
+    if not text:
+        raise api_error(400, "TTS_TEXT_EMPTY", "Der vorzulesende Text ist leer.")
+
+    try:
+        result = text_to_speech(
+            text=text,
+            voice=payload.voice,
+            response_format=payload.format,
+            instructions=payload.instructions,
+            speed=payload.speed,
+        )
+    except TextToSpeechError as exc:
+        raise api_error(
+            502,
+            "TTS_FAILED",
+            "Die Audioantwort konnte nicht erzeugt werden.",
+            str(exc),
+        ) from exc
+
+    return Response(
+        content=result.audio_bytes,
+        media_type=result.content_type,
+        headers={
+            "Cache-Control": "no-store",
+            "X-TTS-Model": result.model,
+            "X-TTS-Voice": result.voice,
+            "X-TTS-Format": result.response_format,
+        },
     )
 
 
@@ -165,6 +217,7 @@ def api_error(status_code: int, code: str, message: str, detail: str | None = No
             "message": message,
         }
     }
+
     if detail:
         payload["error"]["details"] = {"cause": detail}
 
