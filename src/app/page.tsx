@@ -1,10 +1,11 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
+import { ImageIcon, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ChatInterface } from "@/components/chat-interface";
 import { EvidenceGallery } from "@/components/evidence-gallery";
-import { AGENT_MODELS, submitTextRun } from "@/lib/api-client";
+import { AGENT_MODELS, fetchSuccessImageRun, submitTextRun } from "@/lib/api-client";
 import type { AgentRunResponse } from "@/lib/dto";
 
 export default function Home() {
@@ -13,9 +14,11 @@ export default function Home() {
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState(AGENT_MODELS[0]);
+  const [sourcePreviewRun, setSourcePreviewRun] = useState<AgentRunResponse | null>(null);
 
   function handleRunSuccess(run: AgentRunResponse) {
     setPendingMessage(null);
+    setSourcePreviewRun(null);
     setSelectedRunId(run.runId);
     setRunHistory((history) => [...history, run]);
   }
@@ -33,11 +36,25 @@ export default function Home() {
     }
   });
 
+  const successImage = useMutation({
+    mutationFn: fetchSuccessImageRun,
+    onMutate: () => {
+      setErrorMessage(null);
+    },
+    onSuccess: (run) => {
+      setSourcePreviewRun(run);
+    },
+    onError: (error) => {
+      setErrorMessage(formatError(error));
+    }
+  });
+
   const isRunning = textRun.isPending;
   const selectedRun = useMemo(
     () => runHistory.find((run) => run.runId === selectedRunId) ?? runHistory.at(-1) ?? null,
     [runHistory, selectedRunId]
   );
+  const sourceRun = sourcePreviewRun ?? selectedRun;
 
   return (
     <main className="workspace-shell">
@@ -46,8 +63,24 @@ export default function Home() {
           <p className="eyebrow">LangChain + Docling</p>
           <h1>Efferon Agent</h1>
         </div>
-        <div className="header-meta">
-          <span>{process.env.NEXT_PUBLIC_USE_MOCKS === "true" ? "Mock API" : "Agent API"}</span>
+        <div className="header-actions">
+          <div className="header-meta">
+            <span>{process.env.NEXT_PUBLIC_USE_MOCKS === "true" ? "Mock API" : "Agent API"}</span>
+          </div>
+
+          <button
+            type="button"
+            className="secondary-button compact-button"
+            onClick={() => successImage.mutate()}
+            disabled={successImage.isPending}
+          >
+            {successImage.isPending ? (
+              <Loader2 size={16} aria-hidden="true" className="spin" />
+            ) : (
+              <ImageIcon size={16} aria-hidden="true" />
+            )}
+            Test Source
+          </button>
         </div>
       </section>
 
@@ -60,7 +93,10 @@ export default function Home() {
           errorMessage={errorMessage}
           models={AGENT_MODELS}
           selectedModel={selectedModel}
-          onSelectRun={setSelectedRunId}
+          onSelectRun={(runId) => {
+            setSourcePreviewRun(null);
+            setSelectedRunId(runId);
+          }}
           onModelChange={setSelectedModel}
           onSubmitText={(query) => textRun.mutate({ query, model: selectedModel })}
           onRetry={() => {
@@ -72,9 +108,9 @@ export default function Home() {
 
         <aside className="sources-panel">
           <EvidenceGallery
-            evidence={selectedRun?.evidence ?? []}
-            isRunning={isRunning}
-            selectedRun={selectedRun}
+            evidence={sourceRun?.evidence ?? []}
+            isRunning={isRunning || successImage.isPending}
+            selectedRun={sourceRun}
           />
         </aside>
       </section>

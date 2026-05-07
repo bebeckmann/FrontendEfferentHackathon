@@ -1,7 +1,7 @@
 import type { AgentModelOption, AgentRunResponse, ApiErrorResponse } from "./dto";
 import { createMockRun } from "./mock-data";
 
-const API_BASE_URL = "https://backendefferenthackathon.onrender.com";
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://backendefferenthackathon.onrender.com").replace(/\/$/, "");
 const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "true";
 
 export const AGENT_MODELS = [
@@ -40,6 +40,18 @@ type AgentApiResponse = {
   warnings?: string[];
 };
 
+type SuccessImageResponse =
+  | {
+      filename: string;
+      mime_type: string;
+      base64: string;
+      data_url: string;
+    }
+  | {
+      error: string;
+      path?: string;
+    };
+
 export async function submitTextRun({ query, model }: SubmitRunInput): Promise<AgentRunResponse> {
   const cleanedQuery = query.trim();
   if (!cleanedQuery) {
@@ -64,6 +76,58 @@ export async function submitTextRun({ query, model }: SubmitRunInput): Promise<A
 
   const apiResponse = await parseAgentChatResponse(response);
   return mapAgentResponse(cleanedQuery, model, apiResponse);
+}
+
+export async function fetchSuccessImageRun(): Promise<AgentRunResponse> {
+  const response = await fetch(apiPath("/api/success-image"), {
+    method: "GET"
+  });
+  const payload = (await response.json().catch(() => null)) as SuccessImageResponse | null;
+
+  if (!response.ok) {
+    throw new Error("The success image request could not be processed.");
+  }
+
+  if (!payload) {
+    throw new Error("The success image API returned an empty response.");
+  }
+
+  if ("error" in payload) {
+    throw new Error([payload.error, payload.path].filter(Boolean).join(" "));
+  }
+
+  if (!payload.data_url || !payload.data_url.startsWith("data:image/")) {
+    throw new Error("The success image API returned an unexpected image response.");
+  }
+
+  return {
+    runId: `success_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`,
+    status: "completed",
+    query: "Success image test source",
+    transcript: null,
+    answer: {
+      summary: "Success Image",
+      markdown: "Test source loaded from `/api/success-image`."
+    },
+    evidence: [
+      {
+        id: "success_image",
+        documentId: payload.filename,
+        documentName: payload.filename,
+        pageNumber: 1,
+        imageUrl: payload.data_url,
+        width: 1200,
+        height: 900,
+        highlights: [],
+        rationale: payload.mime_type
+      }
+    ],
+    usage: {
+      agentLatencyMs: 0,
+      asrSeconds: 0
+    },
+    createdAt: new Date().toISOString()
+  };
 }
 
 async function parseAgentChatResponse(response: Response): Promise<AgentApiResponse> {
