@@ -18,18 +18,18 @@ from .openrouter_asr import (
     language_from_locale,
     transcribe_audio,
 )
-from .openai_tts import TextToSpeechError, text_to_speech
+from .openrouter_tts import TextToSpeechError, synthesize_speech
 
 load_dotenv()
 
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
-MAX_TTS_TEXT_LENGTH = 4096
+MAX_TTS_CHARS = 12_000
 
 app = FastAPI(title="Efferent Agent Backend", version="0.1.0")
 
 allowed_origins = [
     origin.strip()
-    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://www.sepsis-analysis.online").split(",")
+    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
     if origin.strip()
 ]
 
@@ -42,12 +42,10 @@ app.add_middleware(
 )
 
 
-class TextToSpeechRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=MAX_TTS_TEXT_LENGTH)
+class TtsRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=MAX_TTS_CHARS)
     voice: str | None = None
     format: str | None = "mp3"
-    instructions: str | None = None
-    speed: float | None = Field(default=None, ge=0.25, le=4.0)
 
 
 @app.exception_handler(HTTPException)
@@ -78,7 +76,6 @@ def create_text_run(payload: dict) -> dict:
         raise api_error(400, "VALIDATION_FAILED", "Query is required.")
 
     started_at = time.perf_counter()
-
     return completed_run_response(
         query=query,
         transcript=None,
@@ -111,12 +108,7 @@ async def create_audio_run(
     try:
         transcript = transcribe_audio(audio_bytes, audio_format, language)
     except TranscriptionError as exc:
-        raise api_error(
-            502,
-            "ASR_FAILED",
-            "Die Audioaufnahme konnte nicht transkribiert werden.",
-            str(exc),
-        ) from exc
+        raise api_error(502, "ASR_FAILED", "Die Audioaufnahme konnte nicht transkribiert werden.", str(exc)) from exc
 
     answer_markdown = (
         "Die ASR-Pipeline ist verbunden. Sobald der LangChain-Agent angeschlossen ist, "
@@ -139,37 +131,43 @@ async def create_audio_run(
 
 
 @app.post("/api/tts")
-def create_tts_audio(payload: TextToSpeechRequest) -> Response:
+def create_tts_audio(payload: TtsRequest) -> Response:
     text = payload.text.strip()
-
     if not text:
         raise api_error(400, "TTS_TEXT_EMPTY", "Der vorzulesende Text ist leer.")
 
+    audio_format = (payload.format or "mp3").lower().strip()
+    if audio_format not in {"mp3", "wav", "opus", "aac", "flac"}:
+        raise api_error(
+            400,
+            "TTS_FORMAT_UNSUPPORTED",
+            "Dieses Audioformat wird nicht unterstuetzt.",
+            f"Unsupported format: {audio_format}",
+        )
+
     try:
-        result = text_to_speech(
-            text=text,
+        result = synthesize_speech(
+            text,
             voice=payload.voice,
-            response_format=payload.format,
-            instructions=payload.instructions,
-            speed=payload.speed,
+            audio_format=audio_format,  # type: ignore[arg-type]
         )
     except TextToSpeechError as exc:
-        raise api_error(
-            502,
-            "TTS_FAILED",
-            "Die Audioantwort konnte nicht erzeugt werden.",
-            str(exc),
-        ) from exc
+        raise api_error(502, "TTS_FAILED", "Der Text konnte nicht in Sprache umgewandelt werden.", str(exc)) from exc
+
+    headers = {
+        "Cache-Control": "no-store",
+    }
+
+    if result.generation_id:
+        headers["X-Generation-Id"] = result.generation_id
+
+    headers["X-TTS-Model"] = result.model
+    headers["X-TTS-Voice"] = result.voice
 
     return Response(
         content=result.audio_bytes,
         media_type=result.content_type,
-        headers={
-            "Cache-Control": "no-store",
-            "X-TTS-Model": result.model,
-            "X-TTS-Voice": result.voice,
-            "X-TTS-Format": result.response_format,
-        },
+        headers=headers,
     )
 
 
@@ -217,7 +215,6 @@ def api_error(status_code: int, code: str, message: str, detail: str | None = No
             "message": message,
         }
     }
-
     if detail:
         payload["error"]["details"] = {"cause": detail}
 
