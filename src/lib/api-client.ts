@@ -8,9 +8,6 @@ const TTS_MODEL = process.env.NEXT_PUBLIC_TTS_MODEL ?? "openai/gpt-4o-mini-tts-2
 const TTS_VOICE = process.env.NEXT_PUBLIC_TTS_VOICE ?? "nova";
 const TTS_RESPONSE_FORMAT = "mp3";
 
-const OPENROUTER_TTS_URL = "https://openrouter.ai/api/v1/audio/speech";
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-
 export const AGENT_MODELS = [
   {
     id: process.env.NEXT_PUBLIC_FAST_MODEL ?? "openai/gpt-4o-mini",
@@ -169,32 +166,40 @@ export async function synthesizeSpeech(text: string, signal?: AbortSignal): Prom
     throw new Error("There is no answer text to read.");
   }
 
-  if (!OPENROUTER_API_KEY) {
-    throw new Error("Missing OpenRouter API key. Set NEXT_PUBLIC_OPENROUTER_API_KEY.");
-  }
-
   const response = await fetch("/api/tts", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json"
+    },
+    signal,
     body: JSON.stringify({
-      input: text,
+      input: cleanedText,
+      text: cleanedText,
       language: "en",
-      model: "openai/gpt-4o-mini-tts-2025-12-15",
-      voice: "nova",
-      response_format: "mp3"
+      model: TTS_MODEL,
+      voice: TTS_VOICE,
+      response_format: TTS_RESPONSE_FORMAT
     })
-  }); 
-
+  });
 
   if (!response.ok) {
     const message = await extractOpenRouterErrorMessage(response);
-    throw new Error(message || "The OpenRouter text-to-speech request could not be processed.");
+    throw new Error(message || "The text-to-speech request could not be processed.");
   }
 
-  const blob = await response.blob();
+  const contentType = response.headers.get("content-type") ?? "";
+  const blob = contentType.startsWith("audio/")
+    ? await response.blob()
+    : speechPayloadToBlob(
+        (await response.json().catch(() => null)) as {
+          data_url?: string;
+          base64?: string;
+          mime_type?: string;
+        } | null
+      );
 
   if (!blob.size) {
-    throw new Error("OpenRouter returned empty audio.");
+    throw new Error("The text-to-speech API returned empty audio.");
   }
 
   return {
@@ -270,27 +275,11 @@ async function parseAgentChatResponse(response: Response): Promise<AgentApiRespo
   return payload;
 }
 
-async function extractErrorMessage(response: Response) {
-  const payload = (await response.json().catch(() => null)) as
-    | ApiErrorResponse
-    | { detail?: string; error?: string }
-    | null;
-  if (!payload) return "";
-  if ("error" in payload && typeof payload.error === "string") return payload.error;
-  if ("detail" in payload && typeof payload.detail === "string") return payload.detail;
-  if (
-    "error" in payload &&
-    typeof payload.error === "object" &&
-    payload.error &&
-    "message" in payload.error &&
-    typeof payload.error.message === "string"
-  ) {
-    return payload.error.message;
+function speechPayloadToBlob(payload: { data_url?: string; base64?: string; mime_type?: string } | null) {
+  if (!payload) {
+    throw new Error("The text-to-speech API returned an unexpected audio response.");
   }
-  return "";
-}
 
-function speechPayloadToBlob(payload: { data_url?: string; base64?: string; mime_type?: string }) {
   const mimeType = payload.mime_type ?? "audio/mpeg";
   const base64 = payload.data_url?.includes(",") ? payload.data_url.split(",", 2)[1] : payload.base64;
   if (!base64) {
