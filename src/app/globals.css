@@ -791,7 +791,7 @@ button.assistant-bubble {
 .chat-composer {
   width: 100%;
   padding: 18px 24px;
-  background: #f1ece4;
+  background: white;
 }
 
 .model-switcher {

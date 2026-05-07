@@ -44,7 +44,7 @@ export default function Home() {
       <section className="workspace-header">
         <div>
           <p className="eyebrow">LangChain + Docling</p>
-          <h1>Efferent Agent</h1>
+          <h1>Efferon Agent</h1>
         </div>
         <div className="header-meta">
           <span>{process.env.NEXT_PUBLIC_USE_MOCKS === "true" ? "Mock API" : "Agent API"}</span>

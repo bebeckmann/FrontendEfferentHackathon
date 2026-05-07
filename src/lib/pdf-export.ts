@@ -11,14 +11,14 @@ export function downloadChatHistoryPdf(history: AgentRunResponse[]) {
   let y = MARGIN;
 
   document.setProperties({
-    title: "Efferent Agent Chatverlauf",
+    title: "Efferon Agent Chatverlauf",
     subject: "LangChain Agent run history",
-    creator: "Efferent Agent Frontend",
+    creator: "Efferon Agent Frontend",
   });
 
   document.setFont("helvetica", "bold");
   document.setFontSize(17);
-  document.text("Efferent Agent Chatverlauf", MARGIN, y);
+  document.text("Efferon Agent Chatverlauf", MARGIN, y);
   y += 9;
 
   document.setFont("helvetica", "normal");
@@ -28,7 +28,7 @@ export function downloadChatHistoryPdf(history: AgentRunResponse[]) {
 
   if (!history.length) {
     document.text("Noch kein Chatverlauf vorhanden.", MARGIN, y);
-    document.save("efferent-chatverlauf.pdf");
+    document.save("Efferon-chatverlauf.pdf");
     return;
   }
 
@@ -60,7 +60,7 @@ export function downloadChatHistoryPdf(history: AgentRunResponse[]) {
     y += 5;
   });
 
-  document.save(`efferent-chatverlauf-${new Date().toISOString().slice(0, 10)}.pdf`);
+  document.save(`Efferon-chatverlauf-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 function writeBlock(document: jsPDF, title: string, text: string, y: number) {
