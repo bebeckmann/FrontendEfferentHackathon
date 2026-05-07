@@ -16,7 +16,8 @@ export function QueryComposer({ disabled, onSubmitText, onSubmitAudio }: QueryCo
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!query.trim() || disabled) return;
-    onSubmitText(query);
+    onSubmitText(query.trim());
+    setQuery("");
   }
 
   return (

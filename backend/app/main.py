@@ -102,9 +102,8 @@ async def create_audio_run(
         raise api_error(502, "ASR_FAILED", "Die Audioaufnahme konnte nicht transkribiert werden.", str(exc)) from exc
 
     answer_markdown = (
-        f"**Transkript:** {transcript.text}\n\n"
         "Die ASR-Pipeline ist verbunden. Sobald der LangChain-Agent angeschlossen ist, "
-        "wird dieses Transkript als Query an den Agenten uebergeben und die Docling-Belege werden hier angezeigt."
+        "wird das oben angezeigte echte Transkript als Query an den Agenten uebergeben und die Docling-Belege werden hier angezeigt."
     )
 
     return completed_run_response(

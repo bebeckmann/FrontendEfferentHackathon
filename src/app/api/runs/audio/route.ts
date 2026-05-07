@@ -43,8 +43,7 @@ export async function POST(request: Request) {
           model: transcript.model
         },
         answerMarkdown:
-          `**Transkript:** ${transcript.text}\n\n` +
-          "Die ASR-Pipeline laeuft jetzt als Vercel Serverless Route. Sobald der LangChain-Agent angeschlossen ist, wird dieses Transkript an den Agenten uebergeben und die Docling-Belege werden hier angezeigt.",
+          "Die ASR-Pipeline laeuft jetzt als Vercel Serverless Route. Sobald der LangChain-Agent angeschlossen ist, wird das oben angezeigte echte Transkript an den Agenten uebergeben und die Docling-Belege werden hier angezeigt.",
         latencyMs: elapsedMs(startedAt),
         asrSeconds: transcript.usage?.seconds
       })

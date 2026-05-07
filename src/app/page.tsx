@@ -1,46 +1,55 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import { AnswerPanel } from "@/components/answer-panel";
+import { useMemo, useState } from "react";
+import { ChatInterface } from "@/components/chat-interface";
 import { EvidenceGallery } from "@/components/evidence-gallery";
-import { QueryComposer } from "@/components/query-composer";
-import { RunStatus } from "@/components/run-status";
 import { submitAudioRun, submitTextRun } from "@/lib/api-client";
 import type { AgentRunResponse } from "@/lib/dto";
 
 export default function Home() {
-  const [activeRun, setActiveRun] = useState<AgentRunResponse | null>(null);
   const [runHistory, setRunHistory] = useState<AgentRunResponse[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const answerRef = useRef<HTMLDivElement>(null);
 
   function handleRunSuccess(run: AgentRunResponse) {
-    setActiveRun(run);
+    setPendingMessage(null);
+    setSelectedRunId(run.runId);
     setRunHistory((history) => [...history, run]);
   }
 
   const textRun = useMutation({
     mutationFn: submitTextRun,
-    onMutate: () => setErrorMessage(null),
+    onMutate: (query) => {
+      setErrorMessage(null);
+      setPendingMessage(query);
+    },
     onSuccess: handleRunSuccess,
-    onError: (error) => setErrorMessage(formatError(error))
+    onError: (error) => {
+      setPendingMessage(null);
+      setErrorMessage(formatError(error));
+    }
   });
 
   const audioRun = useMutation({
     mutationFn: submitAudioRun,
-    onMutate: () => setErrorMessage(null),
+    onMutate: () => {
+      setErrorMessage(null);
+      setPendingMessage("Audioaufnahme wird transkribiert.");
+    },
     onSuccess: handleRunSuccess,
-    onError: (error) => setErrorMessage(formatError(error))
+    onError: (error) => {
+      setPendingMessage(null);
+      setErrorMessage(formatError(error));
+    }
   });
 
   const isRunning = textRun.isPending || audioRun.isPending;
-
-  useEffect(() => {
-    if (activeRun?.status === "completed") {
-      answerRef.current?.focus();
-    }
-  }, [activeRun]);
+  const selectedRun = useMemo(
+    () => runHistory.find((run) => run.runId === selectedRunId) ?? runHistory.at(-1) ?? null,
+    [runHistory, selectedRunId]
+  );
 
   return (
     <main className="workspace-shell">
@@ -54,31 +63,30 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="workspace-grid">
-        <aside className="control-panel">
-          <QueryComposer
-            disabled={isRunning}
-            onSubmitText={(query) => textRun.mutate(query)}
-            onSubmitAudio={(audio) => audioRun.mutate(audio)}
-          />
-          <RunStatus
-            run={activeRun}
+      <section className="split-workspace">
+        <ChatInterface
+          history={runHistory}
+          selectedRunId={selectedRun?.runId ?? null}
+          pendingMessage={pendingMessage}
+          isRunning={isRunning}
+          errorMessage={errorMessage}
+          onSelectRun={setSelectedRunId}
+          onSubmitText={(query) => textRun.mutate(query)}
+          onSubmitAudio={(audio) => audioRun.mutate(audio)}
+          onRetry={() => {
+            if (selectedRun?.query) {
+              textRun.mutate(selectedRun.query);
+            }
+          }}
+        />
+
+        <aside className="sources-panel">
+          <EvidenceGallery
+            evidence={selectedRun?.evidence ?? []}
             isRunning={isRunning}
-            errorMessage={errorMessage}
-            onRetry={() => {
-              if (activeRun?.query) {
-                textRun.mutate(activeRun.query);
-              }
-            }}
+            selectedRun={selectedRun}
           />
         </aside>
-
-        <section className="result-panel">
-          <div ref={answerRef} tabIndex={-1} className="focus-anchor">
-            <AnswerPanel run={activeRun} history={runHistory} isRunning={isRunning} />
-          </div>
-          <EvidenceGallery evidence={activeRun?.evidence ?? []} isRunning={isRunning} />
-        </section>
       </section>
     </main>
   );

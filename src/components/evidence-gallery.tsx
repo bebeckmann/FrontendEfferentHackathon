@@ -8,9 +8,13 @@ import { EvidenceViewer } from "./evidence-viewer";
 type EvidenceGalleryProps = {
   evidence: EvidenceImage[];
   isRunning: boolean;
+  selectedRun?: {
+    runId: string;
+    query: string;
+  } | null;
 };
 
-export function EvidenceGallery({ evidence, isRunning }: EvidenceGalleryProps) {
+export function EvidenceGallery({ evidence, isRunning, selectedRun }: EvidenceGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const selected = selectedIndex === null ? null : evidence[selectedIndex] ?? null;
 
@@ -18,11 +22,12 @@ export function EvidenceGallery({ evidence, isRunning }: EvidenceGalleryProps) {
     <section className="evidence-section surface" aria-labelledby="evidence-title" aria-busy={isRunning}>
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Docling</p>
-          <h2 id="evidence-title">Highlighted Evidence</h2>
+          <p className="eyebrow">Quellen</p>
+          <h2 id="evidence-title">Ausgewaehlte Antwort</h2>
         </div>
         <span className="count-badge">{evidence.length}</span>
       </div>
+      {selectedRun ? <p className="source-context">{selectedRun.query}</p> : null}
 
       {isRunning ? (
         <div className="evidence-grid skeleton-grid">
@@ -70,7 +75,7 @@ export function EvidenceGallery({ evidence, isRunning }: EvidenceGalleryProps) {
       ) : (
         <div className="empty-state evidence-empty">
           <ImageIcon size={24} aria-hidden="true" />
-          <p>Noch keine Evidence-Bilder.</p>
+          <p>{selectedRun ? "Fuer diese Antwort wurden noch keine Quellen zurueckgegeben." : "Waehle eine Antwort im Chat aus."}</p>
         </div>
       )}
 
