@@ -8,6 +8,9 @@ const TTS_MODEL = process.env.NEXT_PUBLIC_TTS_MODEL ?? "openai/gpt-4o-mini-tts-2
 const TTS_VOICE = process.env.NEXT_PUBLIC_TTS_VOICE ?? "nova";
 const TTS_RESPONSE_FORMAT = "mp3";
 
+const OPENROUTER_TTS_URL = "https://openrouter.ai/api/v1/audio/speech";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+
 export const AGENT_MODELS = [
   {
     id: process.env.NEXT_PUBLIC_FAST_MODEL ?? "openai/gpt-4o-mini",
@@ -161,20 +164,28 @@ export async function fetchSuccessImageRun(): Promise<AgentRunResponse> {
 
 export async function synthesizeSpeech(text: string, signal?: AbortSignal): Promise<SpeechAudio> {
   const cleanedText = text.trim();
+
   if (!cleanedText) {
     throw new Error("There is no answer text to read.");
   }
 
-  const response = await fetch(apiPath("/api/tts"), {
+  if (!OPENROUTER_API_KEY) {
+    throw new Error("Missing OpenRouter API key. Set NEXT_PUBLIC_OPENROUTER_API_KEY.");
+  }
+
+  const response = await fetch(OPENROUTER_TTS_URL, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+
+      // Optional, aber von OpenRouter empfohlen für App-Zuordnung:
+      "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "",
+      "X-Title": "Efferent Hackathon"
     },
     signal,
     body: JSON.stringify({
       input: cleanedText,
-      text: cleanedText,
-      language: "en",
       model: TTS_MODEL,
       voice: TTS_VOICE,
       response_format: TTS_RESPONSE_FORMAT
@@ -182,46 +193,47 @@ export async function synthesizeSpeech(text: string, signal?: AbortSignal): Prom
   });
 
   if (!response.ok) {
-    const message = await extractErrorMessage(response);
-    throw new Error(message || "The text-to-speech request could not be processed.");
+    const message = await extractOpenRouterErrorMessage(response);
+    throw new Error(message || "The OpenRouter text-to-speech request could not be processed.");
   }
 
-  const contentType = response.headers.get("content-type") ?? "";
-  if (contentType.startsWith("audio/")) {
-    return {
-      blob: await response.blob(),
-      generationId: response.headers.get("x-generation-id") ?? undefined,
-      model: response.headers.get("x-tts-model") ?? TTS_MODEL,
-      voice: response.headers.get("x-tts-voice") ?? TTS_VOICE
-    };
-  }
+  const blob = await response.blob();
 
-  const payload = (await response.json().catch(() => null)) as
-    | {
-        data_url?: string;
-        base64?: string;
-        mime_type?: string;
-        generation_id?: string;
-        model?: string;
-        voice?: string;
-      }
-    | null;
-
-  if (!payload) {
-    throw new Error("The text-to-speech API returned an empty response.");
-  }
-
-  const blob = speechPayloadToBlob(payload);
   if (!blob.size) {
-    throw new Error("The text-to-speech API returned empty audio.");
+    throw new Error("OpenRouter returned empty audio.");
   }
 
   return {
     blob,
-    generationId: payload.generation_id,
-    model: payload.model ?? TTS_MODEL,
-    voice: payload.voice ?? TTS_VOICE
+    generationId: response.headers.get("x-generation-id") ?? undefined,
+    model: TTS_MODEL,
+    voice: TTS_VOICE
   };
+}
+
+async function extractOpenRouterErrorMessage(response: Response) {
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          error?: string | { message?: string };
+          message?: string;
+          detail?: string;
+        }
+      | null;
+
+    if (!payload) return "";
+
+    if (typeof payload.error === "string") return payload.error;
+    if (typeof payload.error === "object" && payload.error?.message) return payload.error.message;
+    if (typeof payload.message === "string") return payload.message;
+    if (typeof payload.detail === "string") return payload.detail;
+
+    return "";
+  }
+
+  return await response.text().catch(() => "");
 }
 
 function extractSuccessImages(payload: SuccessImageResponse): SuccessImageItem[] {
