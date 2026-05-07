@@ -48,9 +48,28 @@ type SuccessImageResponse =
       data_url: string;
     }
   | {
+      images: SuccessImageItem[];
+    }
+  | {
+      sources: SuccessImageItem[];
+    }
+  | SuccessImageItem[]
+  | {
       error: string;
       path?: string;
     };
+
+type SuccessImageItem = {
+  filename?: string;
+  mime_type?: string;
+  base64?: string;
+  data_url?: string;
+  url?: string;
+  label?: string;
+  caption?: string;
+  source?: string;
+  type?: string;
+};
 
 export async function submitTextRun({ query, model }: SubmitRunInput): Promise<AgentRunResponse> {
   const cleanedQuery = query.trim();
@@ -92,11 +111,12 @@ export async function fetchSuccessImageRun(): Promise<AgentRunResponse> {
     throw new Error("The success image API returned an empty response.");
   }
 
-  if ("error" in payload) {
+  if (!Array.isArray(payload) && "error" in payload) {
     throw new Error([payload.error, payload.path].filter(Boolean).join(" "));
   }
 
-  if (!payload.data_url || !payload.data_url.startsWith("data:image/")) {
+  const images = extractSuccessImages(payload);
+  if (!images.length) {
     throw new Error("The success image API returned an unexpected image response.");
   }
 
@@ -106,28 +126,46 @@ export async function fetchSuccessImageRun(): Promise<AgentRunResponse> {
     query: "Success image test source",
     transcript: null,
     answer: {
-      summary: "Success Image",
-      markdown: "Test source loaded from `/api/success-image`."
+      summary: "Success Images",
+      markdown: `${images.length} test source image${images.length === 1 ? "" : "s"} loaded from \`/api/success-image\`.`
     },
-    evidence: [
-      {
-        id: "success_image",
-        documentId: payload.filename,
-        documentName: payload.filename,
-        pageNumber: 1,
-        imageUrl: payload.data_url,
-        width: 1200,
-        height: 900,
-        highlights: [],
-        rationale: payload.mime_type
-      }
-    ],
+    evidence: images.map((image, index) => ({
+      id: `success_image_${index + 1}`,
+      documentId: image.filename ?? image.source ?? image.label ?? `success_image_${index + 1}`,
+      documentName: image.label ?? image.caption ?? image.filename ?? image.source ?? `Success image ${index + 1}`,
+      pageNumber: 1,
+      imageUrl: image.data_url ?? normalizeSourceUrl(image.url ?? ""),
+      width: 1200,
+      height: 900,
+      highlights: [],
+      rationale: image.mime_type ?? image.type
+    })),
     usage: {
       agentLatencyMs: 0,
       asrSeconds: 0
     },
     createdAt: new Date().toISOString()
   };
+}
+
+function extractSuccessImages(payload: SuccessImageResponse): SuccessImageItem[] {
+  let rawImages: SuccessImageItem[];
+  if (Array.isArray(payload)) {
+    rawImages = payload;
+  } else if ("images" in payload) {
+    rawImages = payload.images;
+  } else if ("sources" in payload) {
+    rawImages = payload.sources;
+  } else if ("error" in payload) {
+    rawImages = [];
+  } else {
+    rawImages = [payload];
+  }
+
+  return rawImages.filter((image) => {
+    const imageUrl = image.data_url ?? image.url;
+    return typeof imageUrl === "string" && (imageUrl.startsWith("data:image/") || imageUrl.length > 0);
+  });
 }
 
 async function parseAgentChatResponse(response: Response): Promise<AgentApiResponse> {
