@@ -66,9 +66,13 @@ async function parseJsonResponse(response: Response): Promise<AgentRunResponse> 
   const payload = (await response.json().catch(() => null)) as AgentRunResponse | ApiErrorResponse | null;
 
   if (!response.ok) {
+    const cause =
+      payload && "error" in payload && typeof payload.error?.details === "object" && payload.error.details
+        ? (payload.error.details as { cause?: string }).cause
+        : undefined;
     const message =
       payload && "error" in payload && payload.error?.message
-        ? payload.error.message
+        ? [payload.error.message, cause].filter(Boolean).join(" ")
         : "Die Anfrage konnte nicht verarbeitet werden.";
     throw new Error(message);
   }

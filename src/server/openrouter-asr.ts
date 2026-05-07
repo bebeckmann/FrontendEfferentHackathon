@@ -12,7 +12,10 @@ export type TranscriptionResult = {
 };
 
 export class TranscriptionError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly status?: number
+  ) {
     super(message);
     this.name = "TranscriptionError";
   }
@@ -35,13 +38,17 @@ export async function transcribeAudio({
   const model = process.env.OPENROUTER_ASR_MODEL ?? DEFAULT_ASR_MODEL;
   const url = process.env.OPENROUTER_ASR_URL ?? DEFAULT_ASR_URL;
   const encodedAudio = Buffer.from(audio).toString("base64");
+  const siteUrl = openRouterSiteUrl();
 
   const response = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "HTTP-Referer": siteUrl,
+      "X-Title": "Efferent Agent"
     },
+    signal: AbortSignal.timeout(90_000),
     body: JSON.stringify({
       model,
       input_audio: {
@@ -55,7 +62,7 @@ export async function transcribeAudio({
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new TranscriptionError(`OpenRouter ASR failed with ${response.status}: ${safeJson(payload)}`);
+    throw new TranscriptionError(`OpenRouter ASR failed with ${response.status}: ${safeJson(payload)}`, response.status);
   }
 
   if (!payload || typeof payload.text !== "string" || !payload.text.trim()) {
@@ -116,4 +123,20 @@ function safeJson(payload: unknown) {
   } catch {
     return "unreadable response";
   }
+}
+
+function openRouterSiteUrl() {
+  if (process.env.OPENROUTER_SITE_URL) {
+    return process.env.OPENROUTER_SITE_URL;
+  }
+
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  return "http://localhost:3000";
 }

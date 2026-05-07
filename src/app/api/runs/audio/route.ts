@@ -4,7 +4,7 @@ import { completedRunResponse, elapsedMs, errorResponse } from "@/server/run-res
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
   const startedAt = performance.now();
@@ -24,13 +24,14 @@ export async function POST(request: Request) {
   }
 
   if (audio.size > MAX_AUDIO_BYTES) {
-    return errorResponse(413, "AUDIO_TOO_LARGE", "Die Audioaufnahme ist zu gross.");
+    return errorResponse(413, "AUDIO_TOO_LARGE", "Die Audioaufnahme ist fuer das Hosting zu gross. Bitte kuerzer aufnehmen.");
   }
 
   try {
+    const audioFormat = audioFormatFromFile(audio);
     const transcript = await transcribeAudio({
       audio: await audio.arrayBuffer(),
-      audioFormat: audioFormatFromFile(audio),
+      audioFormat,
       language: languageFromLocale(formData.get("locale"))
     });
 
@@ -51,6 +52,13 @@ export async function POST(request: Request) {
   } catch (error) {
     const cause = error instanceof Error ? error.message : undefined;
     const status = error instanceof TranscriptionError ? 502 : 500;
+    console.error("ASR_FAILED", {
+      cause,
+      providerStatus: error instanceof TranscriptionError ? error.status : undefined,
+      audioSize: audio.size,
+      audioType: audio.type,
+      audioName: audio.name
+    });
     return errorResponse(status, "ASR_FAILED", "Die Audioaufnahme konnte nicht transkribiert werden.", cause);
   }
 }

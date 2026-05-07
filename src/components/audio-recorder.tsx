@@ -8,7 +8,7 @@ type AudioRecorderProps = {
   onSubmitAudio: (audio: Blob) => void;
 };
 
-const MAX_RECORDING_MS = 60_000;
+const MAX_RECORDING_MS = 45_000;
 
 export function AudioRecorder({ disabled, onSubmitAudio }: AudioRecorderProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);

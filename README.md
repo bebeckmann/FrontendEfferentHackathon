@@ -42,6 +42,7 @@ Create `backend/.env` from `backend/.env.example` and set `OPENROUTER_API_KEY`. 
 OPENROUTER_API_KEY=...
 OPENROUTER_ASR_MODEL=openai/whisper-large-v3
 OPENROUTER_ASR_URL=https://openrouter.ai/api/v1/audio/transcriptions
+OPENROUTER_SITE_URL=https://your-vercel-domain.vercel.app
 NEXT_PUBLIC_USE_MOCKS=false
 NEXT_PUBLIC_API_BASE_URL=
 ```
@@ -54,6 +55,16 @@ NEXT_PUBLIC_API_BASE_URL=
 /api/runs/[runId]
 /api/health
 ```
+
+After deployment, open:
+
+```text
+https://your-vercel-domain.vercel.app/api/health
+```
+
+The response should include `"configured": true` under `asr`. If it is `false`, the production environment variable `OPENROUTER_API_KEY` is missing or the deployment was not redeployed after setting it.
+
+Vercel Functions have a 4.5 MB request/response body limit, so the app caps uploaded audio at 4 MB and recordings at 45 seconds.
 
 ## Planning Documents
 
