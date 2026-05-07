@@ -8,13 +8,13 @@ export const AGENT_MODELS = [
   {
     id: process.env.NEXT_PUBLIC_FAST_MODEL ?? "openai/gpt-4o-mini",
     label: "ChatGPT 4o mini",
-    shortLabel: "4o mini",
+    shortLabel: "Fast Mode",
     profile: "fast"
   },
   {
-    id: process.env.NEXT_PUBLIC_REASONING_MODEL ?? "openai/o3",
+    id: process.env.NEXT_PUBLIC_REASONING_MODEL ?? "google/gemini-3-pro-preview",
     label: "Reasoning model",
-    shortLabel: "Reasoning",
+    shortLabel: "Precise Mode",
     profile: "reasoning"
   }
 ] satisfies AgentModelOption[];
