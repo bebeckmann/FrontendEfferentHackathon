@@ -1,19 +1,24 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Plus, Send, Trash2 } from "lucide-react";
+import { Laugh, Plus, Send } from "lucide-react";
 import { AudioRecorder } from "./audio-recorder";
+import type { AgentModelOption } from "@/lib/dto";
 
 type QueryComposerProps = {
   disabled: boolean;
+  models: AgentModelOption[];
+  selectedModel: AgentModelOption;
+  onModelChange: (model: AgentModelOption) => void;
   onSubmitText: (query: string) => void;
-  onSubmitAudio: (audio: Blob) => void;
 };
 
 export function QueryComposer({
   disabled,
+  models,
+  selectedModel,
+  onModelChange,
   onSubmitText,
-  onSubmitAudio,
 }: QueryComposerProps) {
   const [query, setQuery] = useState("");
 
@@ -28,43 +33,63 @@ export function QueryComposer({
   }
 
   return (
-    <section className="surface status-panel" aria-label="Nachricht verfassen">
+    <section className="chat-composer" aria-label="Nachricht verfassen">
+      <div className="model-switcher" role="radiogroup" aria-label="Model selection">
+        {models.map((model) => (
+          <button
+            key={model.id}
+            type="button"
+            role="radio"
+            aria-checked={selectedModel.id === model.id}
+            className={`model-option ${selectedModel.id === model.id ? "selected" : ""}`}
+            onClick={() => onModelChange(model)}
+            disabled={disabled}
+            title={model.id}
+          >
+            {model.shortLabel}
+          </button>
+        ))}
+      </div>
+
       <form onSubmit={handleSubmit} className="chat-composer-form">
         <button
           type="button"
           className="chat-icon-button"
           onClick={() => setQuery("")}
-          disabled={disabled || !query}
-          aria-label={query ? "Eingabe leeren" : "Aktion öffnen"}
+          disabled={disabled}
+          aria-label={query ? "Eingabe leeren" : "Aktion oeffnen"}
         >
-          {query ? (
-            <Trash2 size={22} aria-hidden="true" />
-          ) : (
-            <Plus size={28} aria-hidden="true" />
-          )}
+          <Plus size={32} aria-hidden="true" />
         </button>
 
-        <input
-          id="query-input"
-          className="chat-input"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="What is the relationship between initial lactate level and 28-day mortality in septic shock?"
-          disabled={disabled}
-          autoComplete="off"
-        />
+        <div className="chat-input-shell">
+          <input
+            id="query-input"
+            className="chat-input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="What sepsis biomarkers are associated with early mortality in ICU patients?"
+            disabled={disabled}
+            autoComplete="off"
+          />
+          <button type="button" className="chat-emoji-button" aria-label="Emoji picker">
+            <Laugh size={24} aria-hidden="true" />
+          </button>
+        </div>
 
         <div className="chat-composer-actions">
-          <AudioRecorder disabled={disabled} onSubmitAudio={onSubmitAudio} />
-
-          <button
-            type="submit"
-            className="chat-send-button"
-            disabled={disabled || !query.trim()}
-            aria-label="Absenden"
-          >
-            <Send size={20} aria-hidden="true" />
-          </button>
+          {query.trim() ? (
+            <button
+              type="submit"
+              className="chat-icon-button"
+              disabled={disabled}
+              aria-label="Absenden"
+            >
+              <Send size={22} aria-hidden="true" />
+            </button>
+          ) : (
+            <AudioRecorder disabled={disabled} onTranscript={onSubmitText} />
+          )}
         </div>
       </form>
     </section>

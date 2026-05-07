@@ -12,110 +12,56 @@ type AnswerPanelProps = {
   isRunning: boolean;
 };
 
-const TTS_ENDPOINT = "/api/tts";
-
 export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isLoadingSpeech, setIsLoadingSpeech] = useState(false);
-
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const markdown = run?.answer?.markdown;
 
   useEffect(() => {
     return () => {
-      stopSpeech();
+      window.speechSynthesis?.cancel();
     };
   }, []);
 
   function stopSpeech() {
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current = null;
-    }
-
-    if (audioUrlRef.current) {
-      URL.revokeObjectURL(audioUrlRef.current);
-      audioUrlRef.current = null;
-    }
-
+    window.speechSynthesis?.cancel();
+    utteranceRef.current = null;
     setIsSpeaking(false);
-    setIsLoadingSpeech(false);
   }
 
-  async function toggleSpeech() {
-  if (!markdown) return;
+  function toggleSpeech() {
+    if (!markdown) return;
 
-  if (isSpeaking || isLoadingSpeech) {
-    stopSpeech();
-    return;
-  }
-
-  const text = markdownToSpeechText(markdown);
-  if (!text) return;
-
-  const abortController = new AbortController();
-  abortControllerRef.current = abortController;
-
-  try {
-    setIsLoadingSpeech(true);
-
-    const response = await fetch(TTS_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      signal: abortController.signal,
-      body: JSON.stringify({
-        text,
-        voice: "marin",
-        format: "mp3",
-        instructions:
-          "Sprich auf Deutsch klar, natürlich und ruhig. Nutze eine sachliche Stimme und passende kurze Pausen.",
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      throw new Error(errorText || `TTS failed with status ${response.status}`);
-    }
-
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.startsWith("audio/")) {
-      const errorText = await response.text().catch(() => "");
-      throw new Error(`Expected audio response, got ${contentType}: ${errorText}`);
-    }
-
-    const audioBlob = await response.blob();
-    const audioUrl = URL.createObjectURL(audioBlob);
-
-    audioUrlRef.current = audioUrl;
-
-    const audio = new Audio(audioUrl);
-    audioRef.current = audio;
-
-    audio.onended = stopSpeech;
-    audio.onerror = stopSpeech;
-
-    await audio.play();
-
-    setIsLoadingSpeech(false);
-    setIsSpeaking(true);
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (isSpeaking) {
+      stopSpeech();
       return;
     }
 
-    console.error("TTS playback failed:", error);
-    stopSpeech();
+    const text = markdownToSpeechText(markdown);
+    if (!text || !("speechSynthesis" in window)) return;
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = guessSpeechLocale(text);
+    utterance.rate = 0.95;
+    utterance.onend = () => {
+      if (utteranceRef.current === utterance) {
+        utteranceRef.current = null;
+        setIsSpeaking(false);
+      }
+    };
+    utterance.onerror = () => {
+      if (utteranceRef.current === utterance) {
+        utteranceRef.current = null;
+        setIsSpeaking(false);
+      }
+    };
+
+    utteranceRef.current = utterance;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    setIsSpeaking(true);
   }
-}
 
   return (
     <section className="answer-panel surface" aria-labelledby="answer-title" aria-busy={isRunning}>
@@ -131,18 +77,16 @@ export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
             className="icon-button"
             onClick={toggleSpeech}
             disabled={!markdown}
-            aria-pressed={isSpeaking || isLoadingSpeech}
+            aria-pressed={isSpeaking}
           >
-            {isLoadingSpeech ? (
-              <Loader2 size={18} aria-hidden="true" className="spin" />
-            ) : isSpeaking ? (
+            {isSpeaking ? (
               <VolumeX size={18} aria-hidden="true" />
             ) : (
               <Volume2 size={18} aria-hidden="true" />
             )}
 
             <span className="sr-only">
-              {isSpeaking || isLoadingSpeech ? "Vorlesen stoppen" : "Antwort vorlesen"}
+              {isSpeaking ? "Vorlesen stoppen" : "Antwort vorlesen"}
             </span>
           </button>
 
@@ -211,4 +155,10 @@ function markdownToSpeechText(markdown: string) {
     .replace(/#{1,6}\s+/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function guessSpeechLocale(text: string) {
+  return /[äöüß]|(\b(und|oder|nicht|mit|für|auf|der|die|das|eine|einen)\b)/i.test(text)
+    ? "de-DE"
+    : "en-US";
 }

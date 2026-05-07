@@ -1,10 +1,46 @@
-import type { AgentRunResponse, ApiErrorResponse } from "./dto";
+import type { AgentModelOption, AgentRunResponse, ApiErrorResponse } from "./dto";
 import { createMockRun } from "./mock-data";
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://backendefferenthackathon.onrender.com").replace(/\/$/, "");
 const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "true";
 
-export async function submitTextRun(query: string): Promise<AgentRunResponse> {
+export const AGENT_MODELS = [
+  {
+    id: process.env.NEXT_PUBLIC_FAST_MODEL ?? "openai/gpt-4o-mini",
+    label: "ChatGPT 4o mini",
+    shortLabel: "4o mini",
+    profile: "fast"
+  },
+  {
+    id: process.env.NEXT_PUBLIC_REASONING_MODEL ?? "openai/o3",
+    label: "Reasoning model",
+    shortLabel: "Reasoning",
+    profile: "reasoning"
+  }
+] satisfies AgentModelOption[];
+
+export type SubmitRunInput = {
+  query: string;
+  model: AgentModelOption;
+};
+
+type BackendAgentResponse = {
+  answer: string;
+  sources?: Array<{
+    type?: string;
+    url: string;
+    label?: string;
+  }>;
+  images?: Array<{
+    url: string;
+    caption?: string;
+    source?: string;
+    kind?: string;
+  }>;
+  warnings?: string[];
+};
+
+export async function submitTextRun({ query, model }: SubmitRunInput): Promise<AgentRunResponse> {
   const cleanedQuery = query.trim();
   if (!cleanedQuery) {
     throw new Error("Bitte gib zuerst eine Frage ein.");
@@ -12,87 +48,113 @@ export async function submitTextRun(query: string): Promise<AgentRunResponse> {
 
   if (USE_MOCKS) {
     await delay(550);
-    return createMockRun(cleanedQuery);
-  }
-
-  const response = await fetch(apiPath("/api/runs"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      inputType: "text",
-      query: cleanedQuery,
-      locale: navigator.language || "en-EN"
-    })
-  });
-
-  return parseJsonResponse(response);
-}
-
-export async function submitAudioRun(audio: Blob): Promise<AgentRunResponse> {
-  if (audio.size === 0) {
-    throw new Error("Die Aufnahme ist leer.");
-  }
-
-  if (USE_MOCKS) {
-    await delay(800);
-    return createMockRun("What is the relationship between initial lactate level and 28-day mortality in septic shock?", "What is the relationship between initial lactate level and 28-day mortality in septic shock?");
+    return createMockRun(cleanedQuery, undefined, model);
   }
 
   const formData = new FormData();
-  formData.append("audio", audio, `query.${audioExtension(audio.type)}`);
-  formData.append("locale", navigator.language || "de-DE");
+  formData.append("message", cleanedQuery);
+  formData.append("session_id", sessionId());
+  formData.append("model", model.id);
+  formData.append("model_profile", model.profile);
 
-  const response = await fetch(apiPath("/api/runs/audio"), {
+  const response = await fetch(apiPath("/api/chat"), {
     method: "POST",
     body: formData
   });
 
-  return parseJsonResponse(response);
+  const backendResponse = await parseBackendChatResponse(response);
+  return mapBackendResponse(cleanedQuery, model, backendResponse);
 }
 
-export async function getRun(runId: string): Promise<AgentRunResponse> {
-  if (USE_MOCKS) {
-    await delay(350);
-    return createMockRun(`Geladener Run ${runId}`);
-  }
-
-  const response = await fetch(apiPath(`/api/runs/${runId}`));
-  return parseJsonResponse(response);
-}
-
-async function parseJsonResponse(response: Response): Promise<AgentRunResponse> {
-  const payload = (await response.json().catch(() => null)) as AgentRunResponse | ApiErrorResponse | null;
+async function parseBackendChatResponse(response: Response): Promise<BackendAgentResponse> {
+  const payload = (await response.json().catch(() => null)) as BackendAgentResponse | ApiErrorResponse | null;
 
   if (!response.ok) {
-    const cause =
-      payload && "error" in payload && typeof payload.error?.details === "object" && payload.error.details
-        ? (payload.error.details as { cause?: string }).cause
-        : undefined;
     const message =
       payload && "error" in payload && payload.error?.message
-        ? [payload.error.message, cause].filter(Boolean).join(" ")
-        : "Die Anfrage konnte nicht verarbeitet werden.";
+        ? payload.error.message
+        : payload && "detail" in payload && typeof payload.detail === "string"
+          ? payload.detail
+        : "The backend request could not be processed.";
     throw new Error(message);
   }
 
-  if (!payload || !("runId" in payload)) {
-    throw new Error("Das Backend hat eine unerwartete Antwort geliefert.");
+  if (!payload || !("answer" in payload) || typeof payload.answer !== "string") {
+    throw new Error("The backend returned an unexpected response.");
   }
 
   return payload;
 }
 
-function audioExtension(mimeType: string) {
-  if (mimeType.includes("mp4")) return "m4a";
-  if (mimeType.includes("mpeg")) return "mp3";
-  if (mimeType.includes("wav")) return "wav";
-  return "webm";
-}
-
 function apiPath(path: string) {
   return `${API_BASE_URL}${path}`;
+}
+
+function mapBackendResponse(query: string, model: AgentModelOption, response: BackendAgentResponse): AgentRunResponse {
+  const warningText = response.warnings?.length ? `\n\n${response.warnings.map((warning) => `> ${warning}`).join("\n")}` : "";
+  const sourceEvidence = (response.sources ?? []).map((source, index) => ({
+    id: `src_${index + 1}`,
+    documentId: source.url || `source_${index + 1}`,
+    documentName: source.label ?? source.type ?? `Source ${index + 1}`,
+    pageNumber: 1,
+    imageUrl: normalizeSourceUrl(source.url),
+    width: 1200,
+    height: 900,
+    highlights: [],
+    rationale: source.type
+  }));
+
+  const imageEvidence = (response.images ?? []).map((image, index) => ({
+    id: `ev_${index + 1}`,
+    documentId: image.source ?? `image_${index + 1}`,
+    documentName: image.source ?? image.caption ?? `Evidence ${index + 1}`,
+    pageNumber: 1,
+    imageUrl: normalizeSourceUrl(image.url),
+    width: 1200,
+    height: 900,
+    highlights: [],
+    rationale: image.caption ?? image.kind
+  }));
+
+  return {
+    runId: `run_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`,
+    status: "completed",
+    query,
+    model,
+    transcript: null,
+    answer: {
+      summary: `${model.shortLabel} Answer`,
+      markdown: `${response.answer}${warningText}`
+    },
+    evidence: [...sourceEvidence, ...imageEvidence],
+    usage: {
+      agentLatencyMs: 0,
+      asrSeconds: 0
+    },
+    createdAt: new Date().toISOString()
+  };
+}
+
+function normalizeSourceUrl(url: string) {
+  if (/^(https?:|data:|blob:)/i.test(url)) {
+    return url;
+  }
+
+  if (url.startsWith("data/")) {
+    return `${API_BASE_URL}/static/${url}`;
+  }
+
+  return `${API_BASE_URL}/${url.replace(/^\/+/, "")}`;
+}
+
+function sessionId() {
+  const storageKey = "efferent-session-id";
+  const existing = window.localStorage.getItem(storageKey);
+  if (existing) return existing;
+
+  const created = `session_${crypto.randomUUID()}`;
+  window.localStorage.setItem(storageKey, created);
+  return created;
 }
 
 function delay(ms: number) {

@@ -39,7 +39,7 @@ Vite + React would also work and is simpler. I would choose it if the app stays 
 flowchart LR
   User["User"] --> UI["Next.js Frontend"]
   UI --> Python["Python Backend / LangChain Agent"]
-  Python --> OpenRouter["OpenRouter ASR"]
+  Python --> OpenRouter["OpenRouter LLM"]
   Python --> Agent["LangChain Agent"]
   Agent --> Retrieval["Docling / Retrieval Pipeline"]
   Retrieval --> Evidence["Highlighted Evidence Images"]
@@ -47,23 +47,21 @@ flowchart LR
   Python --> UI
 ```
 
-The browser should only call the Python backend. OpenRouter keys, LangChain tools, document storage, and Docling processing stay server-side.
+The browser calls the Python backend directly. OpenRouter keys, LangChain tools, document storage, and Docling processing stay server-side. Browser speech recognition is used for the MVP voice input, so the deployed frontend does not need an ASR secret.
 
 ## Frontend Routes
 
 | Route | Purpose |
 | --- | --- |
 | `/` | Main ask-and-answer workspace |
-| `/runs/[runId]` | Deep link to a completed answer and its evidence |
+| `/runs/[runId]` | Optional future deep link to a completed answer and its evidence |
 | `/documents/[documentId]` | Optional document/image evidence inspection |
 | `/settings` | Optional backend URL/model/debug toggles for hackathon demos |
 
-For the hackathon MVP, `/` is enough. Keep the route structure ready for `/runs/[runId]`.
+For the hackathon MVP, `/` is enough.
 
 ## Source Notes
 
 - Next.js documents App Router as a file-system router built on React Server Components and supports nested layouts and app structure: https://nextjs.org/docs/app
 - Next.js Route Handlers can provide public endpoints for BFF-style requests if needed: https://nextjs.org/docs/app/getting-started/route-handlers
-- OpenRouter chat completions support non-streaming requests with `stream: false`: https://openrouter.ai/docs/api-reference/chat-completion
-- OpenRouter audio input for chat completions requires base64-encoded audio, not direct audio URLs: https://openrouter.ai/docs/guides/overview/multimodal/audio
-- OpenRouter also documents dedicated STT at `/api/v1/audio/transcriptions`, including `openai/whisper-large-v3`: https://openrouter.ai/docs/api/api-reference/transcriptions/create-audio-transcriptions
+- OpenRouter model ids used by the UI: `openai/gpt-4o-mini` for fast answers and `openai/o3` for stronger reasoning.

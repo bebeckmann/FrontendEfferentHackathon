@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { ChatInterface } from "@/components/chat-interface";
 import { EvidenceGallery } from "@/components/evidence-gallery";
-import { submitAudioRun, submitTextRun } from "@/lib/api-client";
+import { AGENT_MODELS, submitTextRun } from "@/lib/api-client";
 import type { AgentRunResponse } from "@/lib/dto";
 
 export default function Home() {
@@ -12,6 +12,7 @@ export default function Home() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState(AGENT_MODELS[0]);
 
   function handleRunSuccess(run: AgentRunResponse) {
     setPendingMessage(null);
@@ -21,7 +22,7 @@ export default function Home() {
 
   const textRun = useMutation({
     mutationFn: submitTextRun,
-    onMutate: (query) => {
+    onMutate: ({ query }) => {
       setErrorMessage(null);
       setPendingMessage(query);
     },
@@ -32,20 +33,7 @@ export default function Home() {
     }
   });
 
-  const audioRun = useMutation({
-    mutationFn: submitAudioRun,
-    onMutate: () => {
-      setErrorMessage(null);
-      setPendingMessage("Audioaufnahme wird transkribiert.");
-    },
-    onSuccess: handleRunSuccess,
-    onError: (error) => {
-      setPendingMessage(null);
-      setErrorMessage(formatError(error));
-    }
-  });
-
-  const isRunning = textRun.isPending || audioRun.isPending;
+  const isRunning = textRun.isPending;
   const selectedRun = useMemo(
     () => runHistory.find((run) => run.runId === selectedRunId) ?? runHistory.at(-1) ?? null,
     [runHistory, selectedRunId]
@@ -70,12 +58,14 @@ export default function Home() {
           pendingMessage={pendingMessage}
           isRunning={isRunning}
           errorMessage={errorMessage}
+          models={AGENT_MODELS}
+          selectedModel={selectedModel}
           onSelectRun={setSelectedRunId}
-          onSubmitText={(query) => textRun.mutate(query)}
-          onSubmitAudio={(audio) => audioRun.mutate(audio)}
+          onModelChange={setSelectedModel}
+          onSubmitText={(query) => textRun.mutate({ query, model: selectedModel })}
           onRetry={() => {
             if (selectedRun?.query) {
-              textRun.mutate(selectedRun.query);
+              textRun.mutate({ query: selectedRun.query, model: selectedRun.model ?? selectedModel });
             }
           }}
         />

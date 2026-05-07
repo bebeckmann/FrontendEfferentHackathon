@@ -1,10 +1,11 @@
-import type { AgentRunResponse } from "./dto";
+import type { AgentModelOption, AgentRunResponse } from "./dto";
 
-export function createMockRun(query: string, transcript?: string): AgentRunResponse {
+export function createMockRun(query: string, transcript?: string, model?: AgentModelOption): AgentRunResponse {
   return {
     runId: `mock_${Date.now()}`,
     status: "completed",
     query,
+    model,
     transcript: transcript
       ? {
           text: transcript,

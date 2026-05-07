@@ -27,10 +27,20 @@ export type EvidenceImage = {
   rationale?: string;
 };
 
+export type AgentModelProfile = "fast" | "reasoning";
+
+export type AgentModelOption = {
+  id: string;
+  label: string;
+  shortLabel: string;
+  profile: AgentModelProfile;
+};
+
 export type AgentRunResponse = {
   runId: string;
   status: RunStatus;
   query: string;
+  model?: AgentModelOption;
   transcript?: {
     text: string;
     language?: string;

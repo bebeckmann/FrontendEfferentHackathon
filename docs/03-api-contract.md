@@ -2,86 +2,42 @@
 
 ## Boundary
 
-The frontend calls same-origin `/api` endpoints. In local Python-agent development those endpoints can be mirrored by the Python backend, but Vercel deployment uses Next.js serverless route handlers. The server side owns:
+The Vercel frontend calls the Render FastAPI backend directly:
 
-- OpenRouter API keys.
-- Speech-to-text requests.
-- LangChain agent execution.
-- Docling processing.
-- Evidence image generation and storage.
+```text
+https://backendefferenthackathon.onrender.com
+```
 
-The frontend sends text or audio input and renders the returned answer and evidence.
+The backend owns LangChain execution, OpenRouter credentials, uploaded-image handling, and source generation. The frontend owns the chat UI, browser speech recognition, browser speech playback, PDF export, and rendering the returned answer and sources.
 
 ## Frontend Environment
 
-On Vercel, leave `NEXT_PUBLIC_API_BASE_URL` empty so browser calls resolve to the deployed app origin.
+```bash
+NEXT_PUBLIC_API_BASE_URL=https://backendefferenthackathon.onrender.com
+NEXT_PUBLIC_USE_MOCKS=false
+NEXT_PUBLIC_FAST_MODEL=openai/gpt-4o-mini
+NEXT_PUBLIC_REASONING_MODEL=openai/o3
+```
 
 Do not expose `OPENROUTER_API_KEY` in the frontend.
 
-## Submit Text Query
+## Health
 
-`POST /api/runs`
+`GET /health`
 
-Request:
-
-```json
-{
-  "inputType": "text",
-  "query": "Welche Risiken werden im Vertrag genannt?",
-  "locale": "de-DE",
-  "clientRunId": "optional-client-generated-id"
-}
-```
-
-Response:
+Expected backend response:
 
 ```json
 {
-  "runId": "run_01HX...",
-  "status": "completed",
-  "query": "Welche Risiken werden im Vertrag genannt?",
-  "transcript": null,
-  "answer": {
-    "markdown": "Die wichtigsten Risiken sind ...",
-    "summary": "Risiken im Vertrag"
-  },
-  "evidence": [
-    {
-      "id": "ev_001",
-      "documentId": "doc_123",
-      "documentName": "vertrag.pdf",
-      "pageNumber": 4,
-      "imageUrl": "https://backend.example/evidence/run_01HX/ev_001.png",
-      "width": 1600,
-      "height": 2263,
-      "highlights": [
-        {
-          "id": "hl_001",
-          "bbox": {
-            "x": 240,
-            "y": 520,
-            "width": 820,
-            "height": 150
-          },
-          "label": "Haftungsbeschränkung",
-          "snippet": "Die Haftung ist begrenzt auf ...",
-          "confidence": 0.89
-        }
-      ],
-      "rationale": "Diese Passage nennt die Haftungsgrenze."
-    }
-  ],
-  "usage": {
-    "asrSeconds": 0,
-    "agentLatencyMs": 4200
-  },
-  "createdAt": "2026-05-07T10:30:00Z"
+  "status": "ok"
 }
 ```
 
-## Submit Audio Query
+The frontend also keeps a local Vercel health route at `GET /api/health`.
 
-`POST /api/runs/audio`
+## Submit Chat Query
+
+`POST /api/chat`
 
 Use `multipart/form-data`.
 
@@ -89,138 +45,75 @@ Fields:
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `audio` | file | yes | `webm`, `wav`, `mp3`, or `m4a` |
-| `locale` | string | no | Example: `de-DE` |
-| `clientRunId` | string | no | For idempotency/debugging |
+| `message` | string | yes | User text or browser-generated transcript |
+| `session_id` | string | no | Stable browser session id |
+| `model` | string | no | `openai/gpt-4o-mini` or `openai/o3` |
+| `model_profile` | string | no | `fast` or `reasoning` |
+| `images` | file[] | no | Optional research images |
 
-Response shape is the same as `POST /api/runs`, but `transcript` contains the ASR result.
-
-```json
-{
-  "runId": "run_01HY...",
-  "status": "completed",
-  "query": "Welche Risiken werden im Vertrag genannt?",
-  "transcript": {
-    "text": "Welche Risiken werden im Vertrag genannt?",
-    "language": "de",
-    "model": "openai/whisper-large-v3"
-  },
-  "answer": {
-    "markdown": "Die wichtigsten Risiken sind ..."
-  },
-  "evidence": [],
-  "createdAt": "2026-05-07T10:30:00Z"
-}
-```
-
-## Get Existing Run
-
-`GET /api/runs/{runId}`
-
-Use this for deep links and reloads. Return the same response shape as a completed run.
-
-## Error Response
+Current backend response shape:
 
 ```json
 {
-  "error": {
-    "code": "ASR_FAILED",
-    "message": "Die Audioaufnahme konnte nicht transkribiert werden.",
-    "details": {
-      "provider": "openrouter",
-      "requestId": "optional-provider-request-id"
-    }
-  }
-}
-```
-
-Recommended error codes:
-
-- `VALIDATION_FAILED`
-- `AUDIO_TOO_LARGE`
-- `ASR_FAILED`
-- `AGENT_FAILED`
-- `NO_DOCUMENT_CONTEXT`
-- `EVIDENCE_RENDER_FAILED`
-- `RATE_LIMITED`
-- `TIMEOUT`
-
-## OpenRouter ASR Backend Note
-
-The requested ASR URL is:
-
-```text
-https://openrouter.ai/api/v1/chat/completions
-```
-
-For this path, send base64-encoded audio inside a chat message using an `input_audio` content part and set `stream: false`. The backend should verify that the selected model supports audio input.
-
-Conceptual payload:
-
-```json
-{
-  "model": "openai/whisper-large-v3",
-  "stream": false,
-  "messages": [
+  "answer": "The agent answer as markdown-compatible text.",
+  "sources": [
     {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "Transcribe this audio. Return only the transcript."
-        },
-        {
-          "type": "input_audio",
-          "input_audio": {
-            "data": "BASE64_AUDIO",
-            "format": "webm"
-          }
-        }
-      ]
+      "type": "image",
+      "url": "data/success.png",
+      "label": "Proof-of-concept image source"
     }
   ]
 }
 ```
 
-Important: OpenRouter currently documents Whisper-style STT most directly via:
-
-```text
-POST https://openrouter.ai/api/v1/audio/transcriptions
-```
-
-with:
+The frontend also remains compatible with the previous image response shape:
 
 ```json
 {
-  "model": "openai/whisper-large-v3",
-  "input_audio": {
-    "data": "BASE64_AUDIO",
-    "format": "wav"
-  },
-  "language": "de"
+  "answer": "The agent answer.",
+  "images": [
+    {
+      "url": "https://backend.example/static/evidence/page.png",
+      "caption": "Highlighted source image",
+      "source": "page.png",
+      "kind": "docling"
+    }
+  ],
+  "warnings": [
+    "Research-use only. Not for clinical diagnosis, triage, or treatment decisions."
+  ]
 }
 ```
 
-If the hackathon requirement strictly says chat completions, keep the chat-completions integration. If reliability matters more, prefer `/api/v1/audio/transcriptions`.
+Relative source URLs are resolved against the Render backend. A response URL like `data/success.png` is rendered as:
 
-## TypeScript DTOs
+```text
+https://backendefferenthackathon.onrender.com/static/data/success.png
+```
+
+## Model Selection
+
+The UI exposes two modes:
+
+| UI label | OpenRouter model id | Use |
+| --- | --- | --- |
+| `4o mini` | `openai/gpt-4o-mini` | Fast, lower-cost answers |
+| `Reasoning` | `openai/o3` | Stronger multi-step reasoning |
+
+For the model switch to affect generation, the backend should read the optional `model` form field and pass it into `build_agent`, instead of only using `OPENROUTER_MODEL` from the environment.
+
+## Frontend DTO
+
+The frontend maps backend responses into an internal chat-run DTO:
 
 ```ts
-export type RunStatus = "queued" | "running" | "completed" | "failed";
+export type AgentModelProfile = "fast" | "reasoning";
 
-export type BoundingBox = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
-export type EvidenceHighlight = {
+export type AgentModelOption = {
   id: string;
-  bbox: BoundingBox;
-  label?: string;
-  snippet?: string;
-  confidence?: number;
+  label: string;
+  shortLabel: string;
+  profile: AgentModelProfile;
 };
 
 export type EvidenceImage = {
@@ -237,8 +130,9 @@ export type EvidenceImage = {
 
 export type AgentRunResponse = {
   runId: string;
-  status: RunStatus;
+  status: "queued" | "running" | "completed" | "failed";
   query: string;
+  model?: AgentModelOption;
   transcript?: {
     text: string;
     language?: string;

@@ -12,26 +12,14 @@ npm run dev
 
 Open http://localhost:3000.
 
-The app now uses same-origin Next.js API routes by default, which is the same shape Vercel will deploy. Copy `.env.example` to `.env.local` and set:
+The app calls the Render backend directly. Copy `.env.example` to `.env.local` and set:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=
+NEXT_PUBLIC_API_BASE_URL=https://backendefferenthackathon.onrender.com
 NEXT_PUBLIC_USE_MOCKS=false
-OPENROUTER_API_KEY=...
+NEXT_PUBLIC_FAST_MODEL=openai/gpt-4o-mini
+NEXT_PUBLIC_REASONING_MODEL=openai/o3
 ```
-
-## Python Backend
-
-The Python backend is kept for local LangChain integration work. Vercel deployment does not require it because `/api/runs` and `/api/runs/audio` are implemented as Next.js serverless route handlers.
-
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r backend/requirements.txt
-uvicorn backend.app.main:app --reload --port 8000
-```
-
-Create `backend/.env` from `backend/.env.example` and set `OPENROUTER_API_KEY`. The voice endpoint is `POST /api/runs/audio` and uses `openai/whisper-large-v3` through OpenRouter Speech-to-Text.
 
 ## Deploy To Vercel
 
@@ -39,32 +27,22 @@ Create `backend/.env` from `backend/.env.example` and set `OPENROUTER_API_KEY`. 
 2. Set these Environment Variables in Vercel:
 
 ```bash
-OPENROUTER_API_KEY=...
-OPENROUTER_ASR_MODEL=openai/whisper-large-v3
-OPENROUTER_ASR_URL=https://openrouter.ai/api/v1/audio/transcriptions
-OPENROUTER_SITE_URL=https://your-vercel-domain.vercel.app
 NEXT_PUBLIC_USE_MOCKS=false
-NEXT_PUBLIC_API_BASE_URL=
+NEXT_PUBLIC_API_BASE_URL=https://backendefferenthackathon.onrender.com
+NEXT_PUBLIC_FAST_MODEL=openai/gpt-4o-mini
+NEXT_PUBLIC_REASONING_MODEL=openai/o3
 ```
 
-3. Deploy. The production app will call same-origin endpoints:
+3. Deploy.
 
-```text
-/api/runs
-/api/runs/audio
-/api/runs/[runId]
-/api/health
+The frontend calls `https://backendefferenthackathon.onrender.com/api/chat` with `multipart/form-data` fields `message`, `session_id`, `model`, and `model_profile`. The response can contain `answer` plus either `sources` or the older `images` field.
+Voice input and answer playback run in the browser via Web Speech APIs, so the Vercel frontend does not need an `OPENROUTER_API_KEY`.
+
+Make sure the Render backend has `FRONTEND_ORIGIN` set to your deployed Vercel origin, otherwise browser CORS will block requests. Example:
+
+```bash
+FRONTEND_ORIGIN=https://your-vercel-domain.vercel.app
 ```
-
-After deployment, open:
-
-```text
-https://your-vercel-domain.vercel.app/api/health
-```
-
-The response should include `"configured": true` under `asr`. If it is `false`, the production environment variable `OPENROUTER_API_KEY` is missing or the deployment was not redeployed after setting it.
-
-Vercel Functions have a 4.5 MB request/response body limit, so the app caps uploaded audio at 4 MB and recordings at 45 seconds.
 
 ## Planning Documents
 

@@ -1,101 +1,89 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
 
 type AudioRecorderProps = {
   disabled: boolean;
-  onSubmitAudio: (audio: Blob) => void;
+  onTranscript: (text: string) => void;
 };
 
-const MAX_RECORDING_MS = 45_000;
+type SpeechRecognitionEvent = Event & {
+  results: SpeechRecognitionResultList;
+};
 
-export function AudioRecorder({ disabled, onSubmitAudio }: AudioRecorderProps) {
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
-  const startedAtRef = useRef<number | null>(null);
+type SpeechRecognitionLike = EventTarget & {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+};
 
-  const [recordingState, setRecordingState] = useState<
-    "idle" | "recording" | "error"
-  >("idle");
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
-  useEffect(() => {
-    if (recordingState !== "recording") return;
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
 
-    const timer = window.setInterval(() => {
-      const startedAt = startedAtRef.current ?? Date.now();
-      const elapsed = Date.now() - startedAt;
+export function AudioRecorder({ disabled, onTranscript }: AudioRecorderProps) {
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const finalTranscriptRef = useRef("");
+  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "error">("idle");
 
-      if (elapsed >= MAX_RECORDING_MS) {
-        stopRecording();
-      }
-    }, 250);
-
-    return () => window.clearInterval(timer);
-  }, [recordingState]);
-
-  useEffect(() => {
-    return () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
-
-  async function startRecording() {
-    if (
-      !navigator.mediaDevices?.getUserMedia ||
-      typeof MediaRecorder === "undefined"
-    ) {
+  function startRecording() {
+    const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    if (!Recognition) {
       setRecordingState("error");
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = pickMimeType();
-      const recorder = new MediaRecorder(
-        stream,
-        mimeType ? { mimeType } : undefined,
-      );
+      const recognition = new Recognition();
+      finalTranscriptRef.current = "";
+      recognition.lang = "en-US";
+      recognition.interimResults = true;
+      recognition.continuous = false;
 
-      streamRef.current = stream;
-      mediaRecorderRef.current = recorder;
-      chunksRef.current = [];
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map((result) => result[0]?.transcript ?? "")
+          .join(" ")
+          .trim();
+        finalTranscriptRef.current = transcript;
+      };
 
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
+      recognition.onend = () => {
+        setRecordingState("idle");
+        const transcript = finalTranscriptRef.current.trim();
+        recognitionRef.current = null;
+        if (transcript) {
+          onTranscript(transcript);
         }
       };
 
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, {
-          type: recorder.mimeType || "audio/webm",
-        });
-
-        setRecordingState("idle");
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        mediaRecorderRef.current = null;
-        startedAtRef.current = null;
-
-        onSubmitAudio(blob);
+      recognition.onerror = () => {
+        setRecordingState("error");
+        recognitionRef.current = null;
       };
 
-      startedAtRef.current = Date.now();
+      recognitionRef.current = recognition;
       setRecordingState("recording");
-      recorder.start();
+      recognition.start();
     } catch {
       setRecordingState("error");
     }
   }
 
   function stopRecording() {
-    const recorder = mediaRecorderRef.current;
-
-    if (recorder && recorder.state !== "inactive") {
-      recorder.stop();
-    }
+    recognitionRef.current?.stop();
   }
 
   const isRecording = recordingState === "recording";
@@ -122,15 +110,4 @@ export function AudioRecorder({ disabled, onSubmitAudio }: AudioRecorderProps) {
       <Mic size={22} aria-hidden="true" />
     </button>
   );
-}
-
-function pickMimeType() {
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4",
-    "audio/wav",
-  ];
-
-  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
 }

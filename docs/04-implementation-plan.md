@@ -107,8 +107,8 @@ Because there is no streaming, use a single pending state:
 
 Minimum tests:
 
-- Text query submit calls `POST /api/runs`.
-- Audio query submit calls `POST /api/runs/audio`.
+- Text query submit calls `POST /api/chat` with `message`, `session_id`, and the selected `model`.
+- Voice transcript submit uses the same `POST /api/chat` path after browser speech recognition completes.
 - Completed response renders Markdown answer.
 - Evidence images render with correct highlight positions.
 - Empty evidence state renders cleanly.
