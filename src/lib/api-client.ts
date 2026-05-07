@@ -1,7 +1,7 @@
 import type { AgentModelOption, AgentRunResponse, ApiErrorResponse } from "./dto";
 import { createMockRun } from "./mock-data";
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://backendefferenthackathon.onrender.com").replace(/\/$/, "");
+const API_BASE_URL = "https://backendefferenthackathon.onrender.com";
 const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "true";
 
 export const AGENT_MODELS = [
