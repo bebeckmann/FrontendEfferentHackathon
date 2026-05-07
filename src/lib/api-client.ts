@@ -1,7 +1,8 @@
 import type { AgentModelOption, AgentRunResponse, ApiErrorResponse } from "./dto";
 import { createMockRun } from "./mock-data";
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://backendefferenthackathon.onrender.com").replace(/\/$/, "");
+// Don't change the API_BASE_URL !!!
+const API_BASE_URL = "https://backendefferenthackathon.onrender.com";
 const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "true";
 const TTS_MODEL = process.env.NEXT_PUBLIC_TTS_MODEL ?? "openai/gpt-4o-mini-tts-2025-12-15";
 const TTS_VOICE = process.env.NEXT_PUBLIC_TTS_VOICE ?? "nova";
