@@ -33,7 +33,7 @@ Expected backend response:
 }
 ```
 
-The frontend also keeps a local Vercel health route at `GET /api/health`.
+The frontend does not define local API routes.
 
 ## Submit Chat Query
 

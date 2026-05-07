@@ -24,7 +24,7 @@ export type SubmitRunInput = {
   model: AgentModelOption;
 };
 
-type BackendAgentResponse = {
+type AgentApiResponse = {
   answer: string;
   sources?: Array<{
     type?: string;
@@ -62,12 +62,12 @@ export async function submitTextRun({ query, model }: SubmitRunInput): Promise<A
     body: formData
   });
 
-  const backendResponse = await parseBackendChatResponse(response);
-  return mapBackendResponse(cleanedQuery, model, backendResponse);
+  const apiResponse = await parseAgentChatResponse(response);
+  return mapAgentResponse(cleanedQuery, model, apiResponse);
 }
 
-async function parseBackendChatResponse(response: Response): Promise<BackendAgentResponse> {
-  const payload = (await response.json().catch(() => null)) as BackendAgentResponse | ApiErrorResponse | null;
+async function parseAgentChatResponse(response: Response): Promise<AgentApiResponse> {
+  const payload = (await response.json().catch(() => null)) as AgentApiResponse | ApiErrorResponse | null;
 
   if (!response.ok) {
     const message =
@@ -75,12 +75,12 @@ async function parseBackendChatResponse(response: Response): Promise<BackendAgen
         ? payload.error.message
         : payload && "detail" in payload && typeof payload.detail === "string"
           ? payload.detail
-        : "The backend request could not be processed.";
+        : "The agent request could not be processed.";
     throw new Error(message);
   }
 
   if (!payload || !("answer" in payload) || typeof payload.answer !== "string") {
-    throw new Error("The backend returned an unexpected response.");
+    throw new Error("The agent API returned an unexpected response.");
   }
 
   return payload;
@@ -90,7 +90,7 @@ function apiPath(path: string) {
   return `${API_BASE_URL}${path}`;
 }
 
-function mapBackendResponse(query: string, model: AgentModelOption, response: BackendAgentResponse): AgentRunResponse {
+function mapAgentResponse(query: string, model: AgentModelOption, response: AgentApiResponse): AgentRunResponse {
   const warningText = response.warnings?.length ? `\n\n${response.warnings.map((warning) => `> ${warning}`).join("\n")}` : "";
   const sourceEvidence = (response.sources ?? []).map((source, index) => ({
     id: `src_${index + 1}`,
