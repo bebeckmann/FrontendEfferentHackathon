@@ -50,70 +50,72 @@ export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
   }
 
   async function toggleSpeech() {
-    if (!markdown) return;
+  if (!markdown) return;
 
-    if (isSpeaking || isLoadingSpeech) {
-      stopSpeech();
+  if (isSpeaking || isLoadingSpeech) {
+    stopSpeech();
+    return;
+  }
+
+  const text = markdownToSpeechText(markdown);
+  if (!text) return;
+
+  const abortController = new AbortController();
+  abortControllerRef.current = abortController;
+
+  try {
+    setIsLoadingSpeech(true);
+
+    const response = await fetch(TTS_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      signal: abortController.signal,
+      body: JSON.stringify({
+        text,
+        voice: "marin",
+        format: "mp3",
+        instructions:
+          "Sprich auf Deutsch klar, natürlich und ruhig. Nutze eine sachliche Stimme und passende kurze Pausen.",
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      throw new Error(errorText || `TTS failed with status ${response.status}`);
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.startsWith("audio/")) {
+      const errorText = await response.text().catch(() => "");
+      throw new Error(`Expected audio response, got ${contentType}: ${errorText}`);
+    }
+
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+
+    audioUrlRef.current = audioUrl;
+
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+
+    audio.onended = stopSpeech;
+    audio.onerror = stopSpeech;
+
+    await audio.play();
+
+    setIsLoadingSpeech(false);
+    setIsSpeaking(true);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
       return;
     }
 
-    const text = markdownToSpeechText(markdown);
-    if (!text) return;
-
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    try {
-      setIsLoadingSpeech(true);
-      setIsSpeaking(true);
-
-      const response = await fetch(TTS_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        signal: abortController.signal,
-        body: JSON.stringify({
-          text,
-          voice: "marin",
-          format: "mp3",
-          instructions:
-            "Sprich auf Deutsch klar, natürlich und ruhig. Nutze eine sachliche Stimme und passende kurze Pausen.",
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        throw new Error(errorText || `TTS failed with status ${response.status}`);
-      }
-
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      audioUrlRef.current = audioUrl;
-
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-
-      audio.onended = () => {
-        stopSpeech();
-      };
-
-      audio.onerror = () => {
-        stopSpeech();
-      };
-
-      setIsLoadingSpeech(false);
-      await audio.play();
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
-
-      console.error("TTS playback failed:", error);
-      stopSpeech();
-    }
+    console.error("TTS playback failed:", error);
+    stopSpeech();
   }
+}
 
   return (
     <section className="answer-panel surface" aria-labelledby="answer-title" aria-busy={isRunning}>
@@ -129,7 +131,7 @@ export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
             className="icon-button"
             onClick={toggleSpeech}
             disabled={!markdown}
-            aria-pressed={isSpeaking}
+            aria-pressed={isSpeaking || isLoadingSpeech}
           >
             {isLoadingSpeech ? (
               <Loader2 size={18} aria-hidden="true" className="spin" />
