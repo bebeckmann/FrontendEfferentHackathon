@@ -1,8 +1,7 @@
 import type { AgentModelOption, AgentRunResponse, ApiErrorResponse } from "./dto";
 import { createMockRun } from "./mock-data";
 
-// Don't change the API_BASE_URL !!!
-const API_BASE_URL = "https://backendefferenthackathon.onrender.com";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "true";
 const TTS_MODEL = process.env.NEXT_PUBLIC_TTS_MODEL ?? "openai/gpt-4o-mini-tts-2025-12-15";
 const TTS_VOICE = process.env.NEXT_PUBLIC_TTS_VOICE ?? "nova";
@@ -37,16 +36,11 @@ export type SpeechAudio = {
 
 type AgentApiResponse = {
   answer: string;
-  sources?: Array<{
-    type?: string;
-    url: string;
-    label?: string;
-  }>;
   images?: Array<{
-    url: string;
-    caption?: string;
-    source?: string;
-    kind?: string;
+    data: string;   // base64 data URI from backend
+    caption: string;
+    source: string;
+    kind: string;
   }>;
   warnings?: string[];
 };
@@ -96,8 +90,6 @@ export async function submitTextRun({ query, model }: SubmitRunInput): Promise<A
   const formData = new FormData();
   formData.append("message", cleanedQuery);
   formData.append("session_id", sessionId());
-  formData.append("model", model.id);
-  formData.append("model_profile", model.profile);
 
   const response = await fetch(apiPath("/api/chat"), {
     method: "POST",
@@ -301,28 +293,17 @@ function apiPath(path: string) {
 
 function mapAgentResponse(query: string, model: AgentModelOption, response: AgentApiResponse): AgentRunResponse {
   const warningText = response.warnings?.length ? `\n\n${response.warnings.map((warning) => `> ${warning}`).join("\n")}` : "";
-  const sourceEvidence = (response.sources ?? []).map((source, index) => ({
-    id: `src_${index + 1}`,
-    documentId: source.url || `source_${index + 1}`,
-    documentName: source.label ?? source.type ?? `Source ${index + 1}`,
-    pageNumber: 1,
-    imageUrl: normalizeSourceUrl(source.url),
-    width: 1200,
-    height: 900,
-    highlights: [],
-    rationale: source.type
-  }));
 
   const imageEvidence = (response.images ?? []).map((image, index) => ({
     id: `ev_${index + 1}`,
-    documentId: image.source ?? `image_${index + 1}`,
-    documentName: image.source ?? image.caption ?? `Evidence ${index + 1}`,
+    documentId: image.source || `image_${index + 1}`,
+    documentName: image.source || image.caption || `Evidence ${index + 1}`,
     pageNumber: 1,
-    imageUrl: normalizeSourceUrl(image.url),
+    imageUrl: image.data,
     width: 1200,
     height: 900,
     highlights: [],
-    rationale: image.caption ?? image.kind
+    rationale: image.caption
   }));
 
   return {
@@ -335,7 +316,7 @@ function mapAgentResponse(query: string, model: AgentModelOption, response: Agen
       summary: `${model.shortLabel} Answer`,
       markdown: `${response.answer}${warningText}`
     },
-    evidence: [...sourceEvidence, ...imageEvidence],
+    evidence: imageEvidence,
     usage: {
       agentLatencyMs: 0,
       asrSeconds: 0
