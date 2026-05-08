@@ -9,7 +9,7 @@ type IndexResponse = {
   total_chunks: number;
 };
 
-export default function FileUploadPage() {
+export default function DateiUploadPage() {
   const router = useRouter();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -30,7 +30,7 @@ export default function FileUploadPage() {
 
     if (file.type !== "application/pdf") {
       setSelectedFile(null);
-      setErrorMessage("Please upload only a PDF file.");
+      setErrorMessage("Bitte lade ausschließlich eine PDF-Datei hoch.");
       event.target.value = "";
       return;
     }
@@ -48,7 +48,7 @@ export default function FileUploadPage() {
     event.preventDefault();
 
     if (!selectedFile) {
-      setErrorMessage("Please select a PDF file first.");
+      setErrorMessage("Bitte wähle zuerst eine PDF-Datei aus.");
       return;
     }
 
@@ -66,16 +66,16 @@ export default function FileUploadPage() {
       });
 
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
+        throw new Error(`Upload fehlgeschlagen: ${response.status}`);
       }
 
       const result: IndexResponse = await response.json();
 
       setIndexResult(result);
-      console.log("Indexing successful:", result);
+      console.log("Indexierung erfolgreich:", result);
     } catch (error) {
       console.error(error);
-      setErrorMessage("The upload failed.");
+      setErrorMessage("Der Upload ist fehlgeschlagen.");
     } finally {
       setIsUploading(false);
     }
@@ -91,12 +91,12 @@ export default function FileUploadPage() {
             onClick={() => router.push("/")}
           >
             <ArrowLeft size={16} aria-hidden="true" />
-            Back
+            Zurück
           </button>
 
           <div>
             <p className="eyebrow">PDF Upload</p>
-            <h1>File Upload</h1>
+            <h1>Datei-Upload</h1>
           </div>
         </div>
       </section>
@@ -108,9 +108,10 @@ export default function FileUploadPage() {
           </div>
 
           <div>
-            <h2>Upload PDF File</h2>
+            <h2>PDF-Datei hochladen</h2>
             <p>
-              A maximum of one file can be uploaded. Only PDF files are allowed.
+              Es kann maximal eine Datei hochgeladen werden. Erlaubt ist nur der
+              Dateityp PDF.
             </p>
           </div>
 
@@ -121,7 +122,7 @@ export default function FileUploadPage() {
               multiple={false}
               onChange={handleFileChange}
             />
-            <span>Select PDF</span>
+            <span>PDF auswählen</span>
           </label>
 
           {selectedFile && (
@@ -134,7 +135,7 @@ export default function FileUploadPage() {
               <button
                 type="button"
                 onClick={clearFile}
-                aria-label="Remove file"
+                aria-label="Datei entfernen"
               >
                 <X size={16} aria-hidden="true" />
               </button>
@@ -148,15 +149,15 @@ export default function FileUploadPage() {
             className="primary-button"
             disabled={!selectedFile || isUploading}
           >
-            {isUploading ? "Uploading..." : "Upload"}
+            {isUploading ? "Wird hochgeladen..." : "Hochladen"}
           </button>
 
           {indexResult && (
             <div className="upload-result">
-              <h3>Indexing complete</h3>
+              <h3>Indexierung abgeschlossen</h3>
 
               <p>
-                Total chunks created:{" "}
+                Insgesamt erzeugte Chunks:{" "}
                 <strong>{indexResult.total_chunks}</strong>
               </p>
 
@@ -164,7 +165,7 @@ export default function FileUploadPage() {
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>File name</th>
+                    <th>Dateiname</th>
                   </tr>
                 </thead>
                 <tbody>

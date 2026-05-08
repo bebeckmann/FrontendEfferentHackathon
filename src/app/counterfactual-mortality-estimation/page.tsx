@@ -28,6 +28,20 @@ type SortState = {
 } | null;
 
 const API_BASE_URL = "http://localhost:8000";
+const COUNTERFACTUAL_COLUMNS = [
+  "Document",
+  "Study",
+  "Population",
+  "Sample Size",
+  "Predictor / Phenotyping Approach",
+  "Outcome",
+  "Timing",
+  "Method",
+  "Effect Size",
+  "Predictor / Phenotyping Approach",
+  "Notes",
+  "Source",
+];
 
 function normalizeFieldName(value: string) {
   return value
@@ -47,6 +61,10 @@ function stripMarkdown(value: string) {
 function parseMarkdownEntry(markdown: string): Record<string, string> {
   const fields: Record<string, string> = {};
 
+  const allowedFields = new Set(
+    COUNTERFACTUAL_COLUMNS.filter((column) => column !== "Document")
+  );
+
   const lines = markdown
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -55,12 +73,11 @@ function parseMarkdownEntry(markdown: string): Record<string, string> {
   let currentKey: string | null = null;
 
   for (const line of lines) {
-    /**
-     * Matches lines like:
-     * *Study Title:* Some title
-     * **Authors:** Alice, Bob
-     * Study Title: Some title
-     */
+    // Ignore headings, dividers, and Markdown table rows
+    if (line.startsWith("#")) continue;
+    if (line === "---") continue;
+    if (line.startsWith("|")) continue;
+
     const fieldMatch = line.match(
       /^(?:[-•]\s*)?(?:\*\*)?\*?([^:*]+?)\*?(?:\*\*)?\s*:\s*(.*)$/
     );
@@ -69,15 +86,18 @@ function parseMarkdownEntry(markdown: string): Record<string, string> {
       const key = normalizeFieldName(fieldMatch[1]);
       const value = stripMarkdown(fieldMatch[2]);
 
-      fields[key] = value;
-      currentKey = key;
+      if (allowedFields.has(key)) {
+        fields[key] = value;
+        currentKey = key;
+      } else {
+        currentKey = null;
+      }
+
       continue;
     }
 
-    /**
-     * If a field wraps onto the next line, append it to the previous field.
-     */
-    if (currentKey) {
+    // Only append wrapped text to known fields
+    if (currentKey && allowedFields.has(currentKey)) {
       fields[currentKey] = `${fields[currentKey]} ${stripMarkdown(line)}`.trim();
     }
   }
@@ -185,6 +205,24 @@ export default function CounterfactualMortalityEstimationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
+  function normalizeExtractedFields(fields: Record<string, string>) {
+  const normalized = { ...fields };
+
+  if (!normalized["Predictor"] && normalized["Predictor / Phenotyping Approach"]) {
+    normalized["Predictor"] = normalized["Predictor / Phenotyping Approach"];
+  }
+
+  if (!normalized["Performance"] && normalized["Performance / Outcomes"]) {
+    normalized["Performance"] = normalized["Performance / Outcomes"];
+  }
+
+  if (!normalized["DOI"] && normalized["Doi"]) {
+    normalized["DOI"] = normalized["Doi"];
+  }
+
+  return normalized;
+}
+
   useEffect(() => {
     let isMounted = true;
 
@@ -226,12 +264,24 @@ export default function CounterfactualMortalityEstimationPage() {
                 ? firstEntry
                 : ((await response.json()) as ApiEntryResponse);
 
+            const studyLevelFields = parseFirstMarkdownTableRow(
+              data.entry,
+              "STUDY-LEVEL SUMMARY"
+            );
+
+            if (!studyLevelFields["Study"] && studyLevelFields["Study Title"]) {
+              studyLevelFields["Study"] = studyLevelFields["Study Title"];
+            }
+
+            const freeTextFields = normalizeExtractedFields(parseMarkdownEntry(data.entry));
+
             return {
               number: data.number,
               rawMarkdown: data.entry,
               fields: {
                 Document: String(data.number),
-                ...parseMarkdownEntry(data.entry),
+                ...studyLevelFields,
+                ...freeTextFields,
               },
             };
           })
@@ -269,27 +319,111 @@ export default function CounterfactualMortalityEstimationPage() {
     );
   }, [documents, selectedDocumentNumbers]);
 
-  const columns = useMemo(() => {
-    const columnSet = new Set<string>();
+  const columns = COUNTERFACTUAL_COLUMNS;
 
-    selectedDocuments.forEach((document) => {
-      Object.keys(document.fields).forEach((fieldName) => {
-        columnSet.add(fieldName);
-      });
+  function normalizeHeading(value: string) {
+    return value
+      .replace(/^#+\s*/, "")
+      .replace(/\*/g, "")
+      .trim()
+      .toLocaleLowerCase("en-US");
+  }
+
+  function splitMarkdownRow(row: string) {
+    const trimmed = row.trim();
+    const withoutOuterPipes = trimmed.replace(/^\|/, "").replace(/\|$/, "");
+
+    const cells: string[] = [];
+    let current = "";
+    let escaped = false;
+
+    for (const char of withoutOuterPipes) {
+      if (escaped) {
+        current += char;
+        escaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (char === "|") {
+        cells.push(stripMarkdown(current));
+        current = "";
+        continue;
+      }
+
+      current += char;
+    }
+
+    cells.push(stripMarkdown(current));
+
+    return cells.map((cell) => cell.replace(/\\\|/g, "|").trim());
+  }
+
+  function isMarkdownSeparatorRow(line: string) {
+    return /^\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line.trim());
+  }
+
+  function extractMarkdownSection(markdown: string, heading: string) {
+    const targetHeading = normalizeHeading(heading);
+    const lines = markdown.split(/\r?\n/);
+
+    const startIndex = lines.findIndex((line) => {
+      if (!line.trim().startsWith("#")) return false;
+      return normalizeHeading(line) === targetHeading;
     });
 
-    const result = Array.from(columnSet);
+    if (startIndex === -1) return "";
 
-    /**
-     * Keep Document first, then sort the rest alphabetically.
-     */
-    return [
-      ...result.filter((column) => column === "Document"),
-      ...result
-        .filter((column) => column !== "Document")
-        .sort((left, right) => left.localeCompare(right, "en-US")),
-    ];
-  }, [selectedDocuments]);
+    const sectionLines: string[] = [];
+
+    for (let index = startIndex + 1; index < lines.length; index += 1) {
+      const line = lines[index];
+
+      if (line.trim().startsWith("#")) break;
+      if (line.trim() === "---") break;
+
+      sectionLines.push(line);
+    }
+
+    return sectionLines.join("\n");
+  }
+
+  function parseFirstMarkdownTableRow(
+    markdown: string,
+    heading: string
+  ): Record<string, string> {
+    const section = extractMarkdownSection(markdown, heading);
+
+    if (!section) return {};
+
+    const tableLines = section
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("|"));
+
+    if (tableLines.length < 2) return {};
+
+    const headers = splitMarkdownRow(tableLines[0]);
+
+    const firstDataLine = tableLines
+      .slice(1)
+      .find((line) => !isMarkdownSeparatorRow(line));
+
+    if (!firstDataLine) return {};
+
+    const cells = splitMarkdownRow(firstDataLine);
+    const fields: Record<string, string> = {};
+
+    headers.forEach((header, index) => {
+      fields[header] = cells[index] ?? "";
+    });
+
+    return fields;
+  }
 
   const visibleRows = useMemo(() => {
     let rows = selectedDocuments;
@@ -552,9 +686,12 @@ export default function CounterfactualMortalityEstimationPage() {
           <div className="document-checklist">
             {documents.map((document) => {
               const title =
+                document.fields["Study"] ||
                 document.fields["Study Title"] ||
                 document.fields["Title"] ||
                 document.fields["Titel"] ||
+                document.fields["Document Title"] ||
+                document.fields["Article Title"] ||
                 `Document ${document.number}`;
 
               return (

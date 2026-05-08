@@ -94,6 +94,13 @@ export default function Home() {
                 >
                   Counterfactual Mortality Estimation
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigateTo("/sepsis-phenotype-extraction")}
+                >
+                  Sepsis Phenotype Extraction
+                </button>
               </div>
             )}
           </div>
