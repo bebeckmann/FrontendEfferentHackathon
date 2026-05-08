@@ -85,7 +85,7 @@ export default function Home() {
             {menuOpen && (
               <div className="burger-dropdown">
                 <button type="button" onClick={() => navigateTo("/datei-upload")}>
-                  Datei-Upload
+                  Data Upload
                 </button>
 
                 <button
