@@ -1,26 +1,35 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { ImageIcon, Loader2 } from "lucide-react";
+import { ImageIcon, Loader2, Menu } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChatInterface } from "@/components/chat-interface";
 import { EvidenceGallery } from "@/components/evidence-gallery";
 import { AGENT_MODELS, fetchSuccessImageRun, submitTextRun } from "@/lib/api-client";
 import type { AgentRunResponse } from "@/lib/dto";
 
 export default function Home() {
+  const router = useRouter();
+
   const [runHistory, setRunHistory] = useState<AgentRunResponse[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState(AGENT_MODELS[0]);
   const [sourcePreviewRun, setSourcePreviewRun] = useState<AgentRunResponse | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   function handleRunSuccess(run: AgentRunResponse) {
     setPendingMessage(null);
     setSourcePreviewRun(null);
     setSelectedRunId(run.runId);
     setRunHistory((history) => [...history, run]);
+  }
+
+  function navigateTo(path: string) {
+    setMenuOpen(false);
+    router.push(path);
   }
 
   const textRun = useMutation({
@@ -50,19 +59,51 @@ export default function Home() {
   });
 
   const isRunning = textRun.isPending;
+
   const selectedRun = useMemo(
     () => runHistory.find((run) => run.runId === selectedRunId) ?? runHistory.at(-1) ?? null,
     [runHistory, selectedRunId]
   );
+
   const sourceRun = sourcePreviewRun ?? selectedRun;
 
   return (
     <main className="workspace-shell">
       <section className="workspace-header">
-        <div>
-          <p className="eyebrow">LangChain + Docling</p>
-          <h1>Efferon Agent</h1>
+        <div className="header-title-row">
+          <div className="burger-menu-wrapper">
+            <button
+              type="button"
+              className="burger-button"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-label="Menü öffnen"
+              aria-expanded={menuOpen}
+            >
+              <Menu size={22} aria-hidden="true" />
+            </button>
+
+            {menuOpen && (
+              <div className="burger-dropdown">
+                <button type="button" onClick={() => navigateTo("/datei-upload")}>
+                  Datei-Upload
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigateTo("/counterfactual-mortality-estimation")}
+                >
+                  Counterfactual Mortality Estimation
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="eyebrow">LangChain + Docling</p>
+            <h1>Efferon Agent</h1>
+          </div>
         </div>
+
         <div className="header-actions">
           <div className="header-meta">
             <span>{process.env.NEXT_PUBLIC_USE_MOCKS === "true" ? "Mock API" : "Agent API"}</span>
