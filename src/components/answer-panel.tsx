@@ -1,6 +1,7 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Download, Loader2, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AgentRunResponse } from "@/lib/dto";
@@ -134,7 +135,20 @@ export function AnswerPanel({ run, history, isRunning }: AnswerPanelProps) {
           ) : null}
 
           <div className="markdown">
-            <ReactMarkdown>{markdown}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                table: ({ children }) => (
+                  <div className="markdown-table-wrapper">
+                    <table>{children}</table>
+                  </div>
+                ),
+                th: ({ children }) => <th>{children}</th>,
+                td: ({ children }) => <td>{children}</td>,
+              }}
+            >
+              {markdown}
+            </ReactMarkdown>
           </div>
 
           <dl className="metadata-list">

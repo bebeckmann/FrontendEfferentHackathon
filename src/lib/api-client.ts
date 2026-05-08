@@ -43,7 +43,8 @@ type AgentApiResponse = {
     label?: string;
   }>;
   images?: Array<{
-    url: string;
+    data?: string;      // Backend: data:image/png;base64,...
+    url?: string;       // optional weiter unterstützen
     caption?: string;
     source?: string;
     kind?: string;
@@ -313,17 +314,23 @@ function mapAgentResponse(query: string, model: AgentModelOption, response: Agen
     rationale: source.type
   }));
 
-  const imageEvidence = (response.images ?? []).map((image, index) => ({
-    id: `ev_${index + 1}`,
-    documentId: image.source ?? `image_${index + 1}`,
-    documentName: image.source ?? image.caption ?? `Evidence ${index + 1}`,
-    pageNumber: 1,
-    imageUrl: normalizeSourceUrl(image.url),
-    width: 1200,
-    height: 900,
-    highlights: [],
-    rationale: image.caption ?? image.kind
-  }));
+  const imageEvidence = (response.images ?? [])
+  .map((image, index) => {
+    const rawImageUrl = image.data ?? image.url ?? "";
+
+    return {
+      id: `ev_${index + 1}`,
+      documentId: image.source ?? `image_${index + 1}`,
+      documentName: image.caption ?? image.source ?? `Evidence ${index + 1}`,
+      pageNumber: index + 1,
+      imageUrl: normalizeSourceUrl(rawImageUrl),
+      width: 1200,
+      height: 900,
+      highlights: [],
+      rationale: image.caption ?? image.kind
+    };
+  })
+  .filter((evidence) => evidence.imageUrl.length > 0);
 
   return {
     runId: `run_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`,
