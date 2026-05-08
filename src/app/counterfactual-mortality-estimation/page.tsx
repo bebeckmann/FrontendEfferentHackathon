@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchIndexEntry } from "@/lib/api";
 import {
   ArrowLeft,
   Download,
@@ -206,22 +207,22 @@ export default function CounterfactualMortalityEstimationPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   function normalizeExtractedFields(fields: Record<string, string>) {
-  const normalized = { ...fields };
+    const normalized = { ...fields };
 
-  if (!normalized["Predictor"] && normalized["Predictor / Phenotyping Approach"]) {
-    normalized["Predictor"] = normalized["Predictor / Phenotyping Approach"];
+    if (!normalized["Predictor"] && normalized["Predictor / Phenotyping Approach"]) {
+      normalized["Predictor"] = normalized["Predictor / Phenotyping Approach"];
+    }
+
+    if (!normalized["Performance"] && normalized["Performance / Outcomes"]) {
+      normalized["Performance"] = normalized["Performance / Outcomes"];
+    }
+
+    if (!normalized["DOI"] && normalized["Doi"]) {
+      normalized["DOI"] = normalized["Doi"];
+    }
+
+    return normalized;
   }
-
-  if (!normalized["Performance"] && normalized["Performance / Outcomes"]) {
-    normalized["Performance"] = normalized["Performance / Outcomes"];
-  }
-
-  if (!normalized["DOI"] && normalized["Doi"]) {
-    normalized["DOI"] = normalized["Doi"];
-  }
-
-  return normalized;
-}
 
   useEffect(() => {
     let isMounted = true;
@@ -239,7 +240,7 @@ export default function CounterfactualMortalityEstimationPage() {
           );
         }
 
-        const firstEntry = (await firstResponse.json()) as ApiEntryResponse;
+        const firstEntry = await fetchIndexEntry(1);
 
         const entryNumbers = Array.from(
           { length: firstEntry.total },

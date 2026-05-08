@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchIndexEntry } from "@/lib/api";
 import {
   ArrowLeft,
   Download,
@@ -502,7 +503,7 @@ export default function CounterfactualMortalityEstimationPage() {
           );
         }
 
-        const firstEntry = (await firstResponse.json()) as ApiEntryResponse;
+        const firstEntry = await fetchIndexEntry(1);
 
         const entryNumbers = Array.from(
           { length: firstEntry.total },
